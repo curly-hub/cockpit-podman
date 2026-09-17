@@ -143,13 +143,23 @@ class Images extends React.Component {
         const user = this.props.users.find(user => user.uid === image.uid);
         cockpit.assert(user, `User not found for image uid ${image.uid}`);
 
-        const update = this.props.imageUpdates?.[image.key];
+        const storedUpdate = this.props.imageUpdates?.[image.key];
+        // a result only applies while the image still carries the tag that was checked
+        const update = storedUpdate && (image.RepoTags || []).includes(storedUpdate.tag) ? storedUpdate : null;
         let updateLabel = null;
         if (update?.status === "update") {
+            const pulling = this.state.imageDownloadInProgress.includes(update.tag);
             updateLabel = (
-                <Tooltip content={cockpit.format(_("The registry has a newer $0. Use Pull to download it."), update.tag)}>
-                    <Label isCompact status="warning" icon={<ArrowCircleUpIcon />} className="image-update-label">{_("Update available")}</Label>
-                </Tooltip>
+                <>
+                    <Tooltip content={cockpit.format(_("The registry has a newer $0."), update.tag)}>
+                        <Label isCompact status="warning" icon={<ArrowCircleUpIcon />} className="image-update-label">{_("Update available")}</Label>
+                    </Tooltip>
+                    <Button variant="link" isInline size="sm" className="image-update-pull"
+                            isDisabled={pulling} isLoading={pulling}
+                            onClick={() => this.downloadImage(update.tag, null, user.con)}>
+                        {pulling ? _("Pulling…") : _("Pull")}
+                    </Button>
+                </>
             );
         } else if (update?.status === "current") {
             updateLabel = <Label isCompact variant="outline" color="green" icon={<CheckCircleIcon />} className="image-update-label">{_("Up to date")}</Label>;
@@ -313,8 +323,11 @@ class Images extends React.Component {
         );
 
         const { imageStats, unusedImages } = this.calculateStats();
-        const updateResults = Object.keys(this.props.images || {})
-                .map(key => this.props.imageUpdates?.[key])
+        const updateResults = Object.values(this.props.images || {})
+                .map(image => {
+                    const result = this.props.imageUpdates?.[image.key];
+                    return result && (image.RepoTags || []).includes(result.tag) ? result : null;
+                })
                 .filter(Boolean);
         const updatesAvailable = updateResults.filter(u => u.status === "update").length;
         const lastChecked = updateResults.reduce((max, u) => Math.max(max, u.checked || 0), 0);

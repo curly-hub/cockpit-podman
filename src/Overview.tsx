@@ -56,6 +56,7 @@ interface Image {
     key: string;
     uid: number | null;
     Size: number;
+    RepoTags?: string[] | null;
 }
 
 interface Stats {
@@ -79,7 +80,7 @@ export interface OverviewProps {
     pods: Record<string, Pod> | null;
     images: Record<string, Image> | null;
     ownerFilter: string | number;
-    imageUpdates?: Record<string, { status: string }>;
+    imageUpdates?: Record<string, { status: string; tag: string }>;
     onFilterChanged: (text: string) => void;
     onContainerFilterChanged: (value: string) => void;
 }
@@ -245,7 +246,10 @@ export const Overview = ({
     const imageList = Object.values(images ?? {}).filter(i => matchesOwner(i.uid, ownerFilter));
     const imagesSize = imageList.reduce((sum, i) => sum + (i.Size || 0), 0);
     const imagesUnused = imageList.filter(i => !usedImageKeys.has(i.key)).length;
-    const imagesOutdated = imageList.filter(i => imageUpdates?.[i.key]?.status === "update").length;
+    const imagesOutdated = imageList.filter(i => {
+        const update = imageUpdates?.[i.key];
+        return update?.status === "update" && (i.RepoTags ?? []).includes(update.tag);
+    }).length;
 
     // --- runtime ---
     const hasRootless = connected.some(u => u.uid !== 0);

@@ -76,7 +76,7 @@ const PodDeleteModal = ({ con, pod }) => {
     );
 };
 
-export const PodActions = ({ con, onAddNotification, pod, isPodService, onCreateContainer }) => {
+export const PodActions = ({ con, onAddNotification, pod, isPodService, onCreateContainer, extraItems }) => {
     const Dialogs = useDialogs();
 
     const startPod = () => {
@@ -128,6 +128,9 @@ export const PodActions = ({ con, onAddNotification, pod, isPodService, onCreate
     };
 
     const dropdownItems = [];
+    if (extraItems && extraItems.length) {
+        dropdownItems.push(...extraItems, <Divider key="divider-extra" />);
+    }
     if (onCreateContainer && !isPodService) {
         dropdownItems.push(
             <DropdownItem key="action-create-container"

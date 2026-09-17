@@ -20,3 +20,8 @@
     color: var(--pf-t--global--text--color--status--warning--default);
     font-weight: var(--pf-t--global--font--weight--body--bold);
 }
+
+.image-update-pull {
+    margin-inline-start: var(--pf-t--global--spacer--sm);
+    vertical-align: middle;
+}

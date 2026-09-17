@@ -935,6 +935,7 @@ class Application extends React.Component {
                 ownerFilter={this.state.ownerFilter}
                 textFilter={this.state.textFilter}
                 filter={this.state.containersFilter}
+                imageUpdates={this.state.imageUpdates}
                 onAddNotification={this.onAddNotification}
                 onFilterChanged={this.onFilterChanged}
                 onContainerFilterChanged={this.onContainerFilterChanged}

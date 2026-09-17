@@ -4,16 +4,18 @@ import React, { useEffect, useState } from 'react';
 import { Button } from "@patternfly/react-core/dist/esm/components/Button";
 import { Card, CardBody, CardHeader, CardTitle } from "@patternfly/react-core/dist/esm/components/Card";
 import { Content, ContentVariants } from "@patternfly/react-core/dist/esm/components/Content";
+import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
 import { EmptyState, EmptyStateBody, EmptyStateVariant } from "@patternfly/react-core/dist/esm/components/EmptyState";
 import { Label, LabelGroup } from "@patternfly/react-core/dist/esm/components/Label";
 import { Progress, ProgressMeasureLocation, ProgressSize, ProgressVariant } from "@patternfly/react-core/dist/esm/components/Progress";
 import { Skeleton } from "@patternfly/react-core/dist/esm/components/Skeleton";
+import { Spinner } from "@patternfly/react-core/dist/esm/components/Spinner";
 import { Tooltip } from "@patternfly/react-core/dist/esm/components/Tooltip";
 import { Flex } from "@patternfly/react-core/dist/esm/layouts/Flex";
 import { Gallery } from "@patternfly/react-core/dist/esm/layouts/Gallery";
 import {
-    CheckCircleIcon, CubesIcon, ExclamationCircleIcon, ExclamationTriangleIcon, InfoCircleIcon,
-    PauseCircleIcon, RedoIcon, StopCircleIcon,
+    ArrowCircleUpIcon, CheckCircleIcon, CubesIcon, ExclamationCircleIcon, ExclamationTriangleIcon, InfoCircleIcon,
+    LayerGroupIcon, PauseCircleIcon, RedoIcon, StopCircleIcon,
 } from '@patternfly/react-icons';
 import { useDialogs, DialogsContext } from "dialogs.jsx";
 
@@ -22,6 +24,7 @@ import * as machine_info from 'machine-info';
 
 import { ImageRunModal } from './ImageRunModal.jsx';
 import { PodActions } from './PodActions.jsx';
+import { canManageStack, isOutdated, recreateStack, stackOfPod, tagToImageId } from './compose.ts';
 import { RelativeTime, makeKey, image_name, PodmanInfoContext } from './util.js';
 import './Pods.scss';
 
@@ -51,7 +54,10 @@ interface Container {
     uid: number | null;
     Id: string;
     Name: string;
+    Image?: string;
+    ImageName?: string;
     IsInfra?: boolean;
+    Config?: { Labels?: Record<string, string> | null };
     State?: {
         Status?: string;
         Health?: { Status?: string };
@@ -68,6 +74,7 @@ interface Stats {
 interface Image {
     key: string;
     uid: number | null;
+    Id: string;
     RepoTags?: string[] | null;
     [extra: string]: unknown;
 }
@@ -99,7 +106,8 @@ export interface PodsProps {
     textFilter: string;
     /* "running" or "all", the same value the Containers table uses */
     filter: string;
-    onAddNotification: (n: unknown) => void;
+    imageUpdates?: Record<string, { status: string; tag: string }>;
+    onAddNotification: (n: { type: string; error: string; errorDetail?: string }) => void;
     onFilterChanged: (text: string) => void;
     onContainerFilterChanged: (value: string) => void;
 }
@@ -159,10 +167,33 @@ const statusOrder: Record<string, number> = { Running: 0, Degraded: 1, Paused: 2
 
 export const Pods = ({
     pods, quadletPods, quadletContainers, images, containers, containersStats, users, ownerFilter, textFilter, filter,
-    onAddNotification, onFilterChanged, onContainerFilterChanged,
+    imageUpdates, onAddNotification, onFilterChanged, onContainerFilterChanged,
 }: PodsProps) => {
     const [memTotal, setMemTotal] = useState<number>(0);
+    // pod key → label of the stack operation in progress
+    const [stackBusy, setStackBusy] = useState<Record<string, string>>({});
     const Dialogs = useDialogs();
+    const tagMap = tagToImageId(images, makeKey);
+
+    const runStack = async (podKey: string, project: string, label: string, action: () => Promise<void>) => {
+        setStackBusy(prev => ({ ...prev, [podKey]: label }));
+        try {
+            await action();
+            onAddNotification({ type: "success", error: cockpit.format(_("Stack $0: $1 finished"), project, label) });
+        } catch (ex) {
+            onAddNotification({
+                type: "danger",
+                error: cockpit.format(_("Stack $0: $1 failed"), project, label),
+                errorDetail: (ex as { message?: string }).message || String(ex),
+            });
+        } finally {
+            setStackBusy(prev => {
+                const next = { ...prev };
+                delete next[podKey];
+                return next;
+            });
+        }
+    };
 
     const createContainer = (pod: Pod) => {
         // same shape Containers.jsx hands to ImageRunModal
@@ -237,6 +268,15 @@ export const Pods = ({
                     .map(c => ({ Id: c.Id, Names: c.Name, Status: "exited" }));
         }
 
+        const memberContainers = members.map(ref => containers?.[makeKey(pod.uid, ref.Id)]).filter(Boolean) as Container[];
+        const stack = stackOfPod(memberContainers);
+        const outdated = memberContainers.filter(c => isOutdated(c, tagMap, makeKey)).length;
+        const updatesAvailable = memberContainers.filter(c => {
+            const update = c.Image ? imageUpdates?.[makeKey(pod.uid, c.Image)] : undefined;
+            return update?.status === "update" && update.tag === c.ImageName;
+        }).length;
+        const busy = stackBusy[pod.key];
+
         let running = 0;
         let unhealthy = 0;
         let looping = 0;
@@ -288,13 +328,32 @@ export const Pods = ({
         else if (memTotal)
             memLabel += cockpit.format(_(" · $0% of host"), memPct);
 
+        const stackItems: React.ReactNode[] = [];
+        if (canManageStack(pod.uid, stack)) {
+            stackItems.push(
+                <DropdownItem key="stack-pull-recreate" className="pod-action-stack-pull" component="button"
+                              isDisabled={!!busy}
+                              description={_("podman-compose pull && up -d")}
+                              onClick={() => runStack(pod.key, stack.project, _("Pull and recreate"), () => recreateStack(pod.uid, stack, true))}>
+                    {_("Pull and recreate stack")}
+                </DropdownItem>,
+                <DropdownItem key="stack-recreate" className="pod-action-stack-up" component="button"
+                              isDisabled={!!busy}
+                              description={_("podman-compose up -d")}
+                              onClick={() => runStack(pod.key, stack.project, _("Recreate"), () => recreateStack(pod.uid, stack, false))}>
+                    {_("Recreate stack")}
+                </DropdownItem>,
+            );
+        }
+
         return (
             <Card isCompact key={pod.key} className="podman-pod-card" id={`podman-pod-${pod.Id.slice(0, 12)}`}>
                 {/* ct-card-expandable-header opts out of Cockpit's wrapping card-header override */}
                 <CardHeader className="ct-card-expandable-header podman-pod-header" actions={{
                     actions: user?.con
                         ? <PodActions con={user.con} pod={pod} onAddNotification={onAddNotification} isPodService={isPodService}
-                                      onCreateContainer={images ? () => createContainer(pod) : null} />
+                                      onCreateContainer={images ? () => createContainer(pod) : null}
+                                      extraItems={stackItems} />
                         : null,
                     hasNoOffset: true,
                 }}>
@@ -313,6 +372,19 @@ export const Pods = ({
                             <Label status="warning" icon={<RedoIcon />}>{cockpit.format(cockpit.ngettext("$0 restart loop", "$0 restart loops", looping), looping)}</Label>}
                         {unhealthy === 0 && looping === 0 && isRunning && members.length > 0 &&
                             <Label color="green" variant="outline" icon={<CheckCircleIcon />}>{_("Healthy")}</Label>}
+                        {stack &&
+                            <Tooltip content={stack.workingDir ? `${stack.workingDir}/${stack.configFiles.join(", ") || "compose.yaml"}` : stack.project}>
+                                <Label color="blue" icon={<LayerGroupIcon />}>{cockpit.format(_("Compose: $0"), stack.project)}</Label>
+                            </Tooltip>}
+                        {outdated > 0 &&
+                            <Tooltip content={_("A newer image was pulled; recreate the stack to use it.")}>
+                                <Label status="warning" icon={<ArrowCircleUpIcon />}>{cockpit.format(cockpit.ngettext("$0 newer image pulled", "$0 newer images pulled", outdated), outdated)}</Label>
+                            </Tooltip>}
+                        {updatesAvailable > 0 && outdated === 0 &&
+                            <Tooltip content={_("The registry has a newer image; use Pull and recreate stack.")}>
+                                <Label status="warning" icon={<ArrowCircleUpIcon />}>{cockpit.format(cockpit.ngettext("$0 image update available", "$0 image updates available", updatesAvailable), updatesAvailable)}</Label>
+                            </Tooltip>}
+                        {busy && <Label color="blue" icon={<Spinner size="sm" />}>{busy}</Label>}
                         {isPodService && <Label color="purple">{_("systemd")}</Label>}
                         {users.filter(u => u.con).length > 1 && user &&
                             <Label color="grey">{pod.uid === 0 ? _("system") : user.name}</Label>}

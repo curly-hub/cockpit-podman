@@ -7,12 +7,12 @@ import { Card, CardBody, CardHeader, CardTitle } from "@patternfly/react-core/di
 import { Content, ContentVariants } from "@patternfly/react-core/dist/esm/components/Content";
 import { Divider } from "@patternfly/react-core/dist/esm/components/Divider";
 import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
-import { FormSelect, FormSelectOption } from "@patternfly/react-core/dist/esm/components/FormSelect";
 import { Icon } from "@patternfly/react-core/dist/esm/components/Icon";
 import { LabelGroup } from "@patternfly/react-core/dist/esm/components/Label";
+import { ToggleGroup, ToggleGroupItem } from "@patternfly/react-core/dist/esm/components/ToggleGroup";
 import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core/dist/esm/components/Toolbar";
 import { Flex } from "@patternfly/react-core/dist/esm/layouts/Flex";
-import { CheckCircleIcon, ExclamationCircleIcon, InProgressIcon } from '@patternfly/react-icons';
+import { ArrowCircleUpIcon, CheckCircleIcon, ExclamationCircleIcon, InProgressIcon, ShieldAltIcon } from '@patternfly/react-icons';
 import { cellWidth, SortByDirection } from '@patternfly/react-table';
 import { KebabDropdown } from "cockpit-components-dropdown.jsx";
 import { useDialogs, DialogsContext } from "dialogs.jsx";
@@ -32,12 +32,14 @@ import ContainerIntegration from './ContainerIntegration.jsx';
 import ContainerLogs from './ContainerLogs.jsx';
 import ContainerRenameModal from './ContainerRenameModal.jsx';
 import ContainerRestoreModal from './ContainerRestoreModal.jsx';
+import ContainerSecurity, { securityWarnings } from './ContainerSecurity.tsx';
 import ContainerTerminal from './ContainerTerminal.jsx';
 import ForceRemoveModal from './ForceRemoveModal.jsx';
 import { ImageRunModal } from './ImageRunModal.jsx';
 import { PodCreateModal } from './PodCreateModal.jsx';
 import PruneUnusedContainersModal from './PruneUnusedContainersModal.jsx';
 import * as client from './client.js';
+import { canManageStack, containerStack, isOutdated, recreateStack, tagToImageId } from './compose.ts';
 import * as utils from './util.js';
 
 import './Containers.scss';
@@ -45,7 +47,7 @@ import '@patternfly/patternfly/utilities/Accessibility/accessibility.css';
 
 const _ = cockpit.gettext;
 
-const ContainerActions = ({ con, container, onAddNotification, localImages, updateContainer, isSystemdService, isDownloading }) => {
+const ContainerActions = ({ con, container, onAddNotification, localImages, updateContainer, isSystemdService, isDownloading, outdatedImage, stack }) => {
     const Dialogs = useDialogs();
     const isRunning = container.State.Status == "running";
     const isPaused = container.State.Status === "paused";
@@ -183,6 +185,18 @@ const ContainerActions = ({ con, container, onAddNotification, localImages, upda
     };
 
     const actions = [];
+    if (outdatedImage && canManageStack(container.uid, stack)) {
+        actions.push(
+            <DropdownItem key="recreate-stack"
+                          description={cockpit.format(_("podman-compose up -d in $0"), stack.workingDir)}
+                          onClick={() => recreateStack(container.uid, stack, false)
+                                  .then(() => onAddNotification({ type: 'success', error: cockpit.format(_("Recreated stack $0"), stack.project) }))
+                                  .catch(ex => onAddNotification({ type: 'danger', error: cockpit.format(_("Failed to recreate stack $0"), stack.project), errorDetail: ex.message }))}>
+                {_("Recreate with new image")}
+            </DropdownItem>,
+            <Divider key="divider-recreate" />,
+        );
+    }
     if (isRunning || isPaused) {
         // Allow restarting quadlets from the logged in user and superuser
         if (isSystemdService && [0, null].includes(container.uid)) {
@@ -417,7 +431,10 @@ class Containers extends React.Component {
                 </utils.PodmanInfoContext.Consumer>);
     }
 
-    renderRow(containersStats, container, localImages, podLookup) {
+    renderRow(containersStats, container, localImages, podLookup, tagMap) {
+        const stack = containerStack(container);
+        const outdatedImage = isOutdated(container, tagMap || {}, utils.makeKey);
+        const warnings = container.HostConfig ? securityWarnings(container) : [];
         const containerStats = containersStats[container.key];
         const image = container.ImageName;
         const isToolboxContainer = container.Config?.Labels?.["com.github.containers.toolbox"] === "true";
@@ -472,6 +489,15 @@ class Containers extends React.Component {
                     {isToolboxContainer && <Badge className='ct-badge-toolbox'>toolbox</Badge>}
                     {isDistroboxContainer && <Badge className='ct-badge-distrobox'>distrobox</Badge>}
                     {isSystemdService && <Badge className='ct-badge-service'>{_("service")}</Badge>}
+                    {outdatedImage &&
+                        <Badge className='ct-badge-outdated ct-badge-with-icon' title={_("A newer image was pulled; recreate the container to use it")}>
+                            <Icon isInline><ArrowCircleUpIcon /></Icon> {_("newer image pulled")}
+                        </Badge>}
+                    {warnings.length > 0 &&
+                        <Badge className={`ct-badge-security ct-badge-with-icon ${warnings.some(w => w.severity === "danger") ? "ct-badge-security-danger" : ""}`}
+                               title={warnings.map(w => w.text).join(", ")}>
+                            <Icon isInline><ShieldAltIcon /></Icon> {warnings.length}
+                        </Badge>}
                 </Flex>
                 <small>{image}</small>
                 <small>{utils.quote_cmdline(container.Config?.Cmd)}</small>
@@ -511,10 +537,13 @@ class Containers extends React.Component {
             if (pod) {
                 podName = pod.Name;
                 podCell = (
-                    <Button variant="link" isInline className="container-pod-link"
-                            onClick={() => document.getElementById(`podman-pod-${pod.Id.slice(0, 12)}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>
-                        {pod.Name}
-                    </Button>
+                    <div className="container-block">
+                        <Button variant="link" isInline className="container-pod-link"
+                                onClick={() => document.getElementById(`podman-pod-${pod.Id.slice(0, 12)}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>
+                            {pod.Name}
+                        </Button>
+                        {stack?.service && <small>{cockpit.format(_("service: $0"), stack.service)}</small>}
+                    </div>
                 );
             }
         }
@@ -539,7 +568,9 @@ class Containers extends React.Component {
                                      localImages={localImages}
                                      updateContainer={this.props.updateContainer}
                                      isSystemdService={isSystemdService}
-                                     isDownloading={container.isDownloading} />,
+                                     isDownloading={container.isDownloading}
+                                     outdatedImage={outdatedImage}
+                                     stack={stack} />,
             props: { className: "pf-v6-c-table__action" }
         });
 
@@ -559,6 +590,13 @@ class Containers extends React.Component {
                     renderer: ContainerIntegration,
                     data: { container, localImages }
                 });
+                if (container.HostConfig) {
+                    tabs.push({
+                        name: _("Security"),
+                        renderer: ContainerSecurity,
+                        data: { container }
+                    });
+                }
                 tabs.push({
                     name: _("Logs"),
                     renderer: ContainerTerminalWrapper,
@@ -619,9 +657,26 @@ class Containers extends React.Component {
         this.setState({ showPruneUnusedContainersModal: true });
     };
 
-    filterContainers = (containers) => {
+    matchesStateFilter = (container, filter) => {
+        const status = container?.State?.Status;
+        const health = container?.State?.Health?.Status ?? container?.State?.Healthcheck?.Status;
+        switch (filter) {
+        case "running":
+            return ["running", "restarting"].includes(status);
+        case "unhealthy":
+            return health === "unhealthy" || status === "restarting" || (status === "running" && (container?.RestartCount ?? 0) >= 3);
+        case "exited":
+            return ["exited", "stopped", "created", "configured"].includes(status);
+        case "outdated":
+            return isOutdated(container, this.tagMap || {}, utils.makeKey);
+        default:
+            return true;
+        }
+    };
+
+    filterContainers = (containers, filter = this.props.filter) => {
         let filtered = [];
-        filtered = Object.keys(containers).filter(id => !(this.props.filter == "running") || ["running", "restarting"].includes(this.props.containers[id]?.State?.Status));
+        filtered = Object.keys(containers).filter(id => this.matchesStateFilter(containers[id], filter));
 
         const filter_by_text = (lcf, id) => {
             const container = containers[id];
@@ -680,6 +735,7 @@ class Containers extends React.Component {
     };
 
     render() {
+        this.tagMap = tagToImageId(this.props.images, utils.makeKey);
         const columnTitles = [
             { title: _("Container"), transforms: [cellWidth(20)], sortable: true },
             { title: _("Pod"), sortable: true },
@@ -702,8 +758,19 @@ class Containers extends React.Component {
             emptyCaption = _("No containers that match the current filter");
         else if (this.props.filter == "running")
             emptyCaption = _("No running containers");
+        else if (this.props.filter != "all")
+            emptyCaption = _("No containers in this state");
 
+        const stateCounts = { all: 0, running: 0, unhealthy: 0, exited: 0, outdated: 0 };
         if (isLoaded) {
+            // counts for the filter chips: owner and text filters applied, state filter not
+            this.filterContainers(this.props.containers, "all").forEach(id => {
+                const container = this.props.containers[id];
+                for (const f of Object.keys(stateCounts))
+                    if (this.matchesStateFilter(container, f))
+                        stateCounts[f]++;
+            });
+
             Object.values(this.props.pods).forEach(pod => {
                 podLookup[pod.key] = pod;
                 const service_name = pod?.Labels?.PODMAN_SYSTEMD_UNIT;
@@ -770,14 +837,23 @@ class Containers extends React.Component {
         const filterRunning = (
             <Toolbar>
                 <ToolbarContent className="containers-containers-toolbarcontent">
-                    <ToolbarItem alignSelf="center" variant="label" htmlFor="containers-containers-filter">
-                        {_("Show")}
-                    </ToolbarItem>
                     <ToolbarItem>
-                        <FormSelect id="containers-containers-filter" value={this.props.filter} onChange={(_, value) => this.props.handleFilterChange(value)}>
-                            <FormSelectOption value='all' label={_("All")} />
-                            <FormSelectOption value='running' label={_("Only running")} />
-                        </FormSelect>
+                        <ToggleGroup id="containers-containers-filter" aria-label={_("Filter containers by state")} isCompact>
+                            {[
+                                ["all", _("All")],
+                                ["running", _("Running")],
+                                ["unhealthy", _("Unhealthy")],
+                                ["exited", _("Exited")],
+                                ["outdated", _("Newer image")],
+                            ].filter(([value]) => ["all", "running", "exited"].includes(value) || stateCounts[value] > 0 || this.props.filter === value)
+                                    .map(([value, label]) => (
+                                        <ToggleGroupItem key={value}
+                                                         buttonId={`containers-filter-${value}`}
+                                                         text={`${label} (${stateCounts[value]})`}
+                                                         isSelected={this.props.filter === value}
+                                                         onChange={() => this.props.handleFilterChange(value)} />
+                                    ))}
+                        </ToggleGroup>
                     </ToolbarItem>
                     <Divider orientation={{ default: "vertical" }} />
                     <ToolbarItem>
@@ -838,7 +914,7 @@ class Containers extends React.Component {
                                   columns={columnTitles}
                                   sortMethod={sortRows}
                                   rows={isLoaded
-                                      ? listContainers.map(container => this.renderRow(this.props.containersStats, container, localImages, podLookup))
+                                      ? listContainers.map(container => this.renderRow(this.props.containersStats, container, localImages, podLookup, this.tagMap))
                                       : []}
                                   sortBy={{ index: 0, direction: SortByDirection.asc }} />
                     {this.state.showPruneUnusedContainersModal &&
