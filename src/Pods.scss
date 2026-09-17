@@ -12,10 +12,26 @@
 
 .podman-pod-card {
     block-size: 100%;
+
+    // Cockpit's PatternFly override sets flex-wrap: wrap on card headers, which pushes the
+    // kebab menu below a long pod name. Keep title and menu on one row; the name wraps instead.
+    > .pf-v6-c-card__header {
+        flex-wrap: nowrap;
+        align-items: flex-start;
+
+        .pf-v6-c-card__header-main {
+            flex: 1 1 auto;
+            min-inline-size: 0;
+        }
+
+        > .pf-v6-c-card__actions {
+            flex: 0 0 auto;
+        }
+    }
 }
 
 .podman-pod-name {
-    font-size: var(--pf-t--global--font--size--xl);
+    font-size: var(--pf-t--global--font--size--lg);
     font-weight: var(--pf-t--global--font--weight--body--bold);
     text-align: start;
     overflow-wrap: anywhere;
@@ -34,7 +50,7 @@
 
 .podman-pod-facts {
     color: var(--pf-t--global--text--color--subtle);
-    font-size: var(--pf-t--global--font--size--md);
+    font-size: var(--pf-t--global--font--size--sm);
 }
 
 .podman-pod-containers .pf-v6-c-label {
