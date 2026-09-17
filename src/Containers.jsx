@@ -362,7 +362,6 @@ class Containers extends React.Component {
         };
         this.renderRow = this.renderRow.bind(this);
         this.onWindowResize = this.onWindowResize.bind(this);
-        this.podStats = this.podStats.bind(this);
         this.filterContainers = this.filterContainers.bind(this);
 
         this.cardRef = React.createRef();
