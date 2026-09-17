@@ -1,0 +1,43 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+@use "ct-card.scss";
+
+#app .pf-v6-c-card.containers-pods {
+    @extend .ct-card;
+}
+
+.podman-pod-card {
+    block-size: 100%;
+}
+
+.podman-pod-name {
+    font-size: var(--pf-t--global--font--size--lg);
+    font-weight: var(--pf-t--global--font--weight--body--bold);
+    text-align: start;
+    overflow-wrap: anywhere;
+}
+
+.podman-pod-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pf-t--global--spacer--sm);
+}
+
+.podman-pod-facts,
+.podman-pod-uncapped {
+    color: var(--pf-t--global--text--color--subtle);
+    font-size: var(--pf-t--global--font--size--sm);
+}
+
+.podman-pod-uncapped {
+    color: var(--pf-t--global--text--color--status--warning--default);
+}
+
+.podman-pod-containers .pf-v6-c-label {
+    cursor: pointer;
+}
+
+.podman-pod-containers .pf-v6-c-label__text {
+    max-inline-size: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
