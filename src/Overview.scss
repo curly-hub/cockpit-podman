@@ -9,6 +9,10 @@
     justify-content: flex-end;
 }
 
+.podman-overview-tiles {
+    grid-auto-rows: 1fr;
+}
+
 .podman-overview-tile {
     display: flex;
     flex-direction: column;

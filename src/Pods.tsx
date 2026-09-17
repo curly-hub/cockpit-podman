@@ -399,7 +399,7 @@ export const Pods = ({
         );
     } else {
         body = (
-            <Gallery hasGutter minWidths={{ default: "18rem" }}>
+            <Gallery hasGutter minWidths={{ default: "18rem" }} className="podman-pod-gallery">
                 {podList.map(renderPod)}
             </Gallery>
         );

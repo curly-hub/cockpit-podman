@@ -5,6 +5,11 @@
     @extend .ct-card;
 }
 
+.podman-pod-gallery {
+    // every row as tall as the tallest card, so all cards line up
+    grid-auto-rows: 1fr;
+}
+
 .podman-pod-card {
     block-size: 100%;
 }
@@ -20,6 +25,11 @@
     display: flex;
     flex-direction: column;
     gap: var(--pf-t--global--spacer--sm);
+}
+
+// keep the member labels at the bottom edge of every card
+.podman-pod-containers {
+    margin-block-start: auto;
 }
 
 .podman-pod-facts {
