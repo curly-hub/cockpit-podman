@@ -23,8 +23,10 @@ import ContainerHeader from './ContainerHeader.tsx';
 import Containers from './Containers.jsx';
 import Images from './Images.jsx';
 import { Overview } from './Overview.tsx';
+import { Pods } from './Pods.tsx';
 import * as client from './client.js';
 import detect_quadlets from './detect-quadlets.py';
+import * as imageUpdates from './image-updates.ts';
 import rest from './rest.js';
 import { makeKey, WithPodmanInfo, debug } from './util.js';
 
@@ -67,6 +69,10 @@ class Application extends React.Component {
             notifications: [],
             version: '1.3.0',
             selinuxAvailable: false,
+            arch: "amd64",
+            // image key → { status, tag, checked, ... }, see image-updates.ts
+            imageUpdates: imageUpdates.loadResults(),
+            imageUpdatesChecking: false,
             userPodmanRestartAvailable: false,
             userLingeringEnabled: null,
             location: {},
@@ -79,6 +85,7 @@ class Application extends React.Component {
         this.updateContainer = this.updateContainer.bind(this);
         this.goToServicePage = this.goToServicePage.bind(this);
         this.onNavigate = this.onNavigate.bind(this);
+        this.checkImageUpdates = this.checkImageUpdates.bind(this);
 
         this.pendingUpdateContainer = {}; // key (uid-id) → promise
     }
@@ -645,6 +652,7 @@ class Application extends React.Component {
                     version: reply.version.Version,
                     registries: reply.registries,
                     cgroupVersion: reply.host.cgroupVersion,
+                    arch: reply.host.arch || prevState.arch,
                 };
             });
         } catch (err) {
@@ -828,6 +836,19 @@ class Application extends React.Component {
         this.setState({ userPodmanRestartAvailable: out.trim() === "loaded" });
     }
 
+    checkImageUpdates() {
+        if (!this.state.images || this.state.imageUpdatesChecking)
+            return;
+        this.setState({ imageUpdatesChecking: true });
+        imageUpdates.checkImages(Object.values(this.state.images), this.state.arch, (key, result) => {
+            this.setState(prevState => {
+                const updates = { ...prevState.imageUpdates, [key]: result };
+                imageUpdates.storeResults(updates);
+                return { imageUpdates: updates };
+            });
+        }).finally(() => this.setState({ imageUpdatesChecking: false }));
+    }
+
     goToServicePage(e) {
         if (!e || e.button !== 0)
             return;
@@ -889,8 +910,22 @@ class Application extends React.Component {
                 pods={loadingPods ? null : (this.state.pods ?? null)}
                 images={loadingImages ? null : this.state.images}
                 ownerFilter={this.state.ownerFilter}
+                imageUpdates={this.state.imageUpdates}
                 onFilterChanged={this.onFilterChanged}
                 onContainerFilterChanged={this.onContainerFilterChanged}
+            />
+        );
+        const podList = (
+            <Pods
+                key="podList"
+                pods={loadingPods ? null : (this.state.pods ?? null)}
+                containers={loadingContainers ? null : this.state.containers}
+                containersStats={this.state.containersStats}
+                users={this.state.users}
+                ownerFilter={this.state.ownerFilter}
+                textFilter={this.state.textFilter}
+                onAddNotification={this.onAddNotification}
+                onFilterChanged={this.onFilterChanged}
             />
         );
         const imageList = (
@@ -903,6 +938,9 @@ class Application extends React.Component {
                 ownerFilter={this.state.ownerFilter}
                 showAll={ () => this.setState({ containersFilter: "all" }) }
                 users={this.state.users}
+                imageUpdates={this.state.imageUpdates}
+                imageUpdatesChecking={this.state.imageUpdatesChecking}
+                onCheckImageUpdates={this.checkImageUpdates}
             />
         );
         const containerList = (
@@ -967,6 +1005,7 @@ class Application extends React.Component {
                         <PageSection hasBodyWrapper={false} className='ct-pagesection-mobile'>
                             <Stack hasGutter>
                                 {overview}
+                                {podList}
                                 {imageList}
                                 {containerList}
                             </Stack>

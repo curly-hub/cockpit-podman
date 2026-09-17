@@ -6,7 +6,10 @@ import { Card, CardBody, CardFooter, CardHeader, CardTitle } from "@patternfly/r
 import { Content, ContentVariants } from "@patternfly/react-core/dist/esm/components/Content";
 import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
 import { ExpandableSection } from "@patternfly/react-core/dist/esm/components/ExpandableSection";
+import { Label } from "@patternfly/react-core/dist/esm/components/Label";
+import { Tooltip } from "@patternfly/react-core/dist/esm/components/Tooltip";
 import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex";
+import { ArrowCircleUpIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { cellWidth, SortByDirection } from '@patternfly/react-table';
 import { KebabDropdown } from "cockpit-components-dropdown.jsx";
 import { useDialogs, DialogsContext } from "dialogs.jsx";
@@ -140,8 +143,26 @@ class Images extends React.Component {
         const user = this.props.users.find(user => user.uid === image.uid);
         cockpit.assert(user, `User not found for image uid ${image.uid}`);
 
+        const update = this.props.imageUpdates?.[image.key];
+        let updateLabel = null;
+        if (update?.status === "update") {
+            updateLabel = (
+                <Tooltip content={cockpit.format(_("The registry has a newer $0. Use Pull to download it."), update.tag)}>
+                    <Label isCompact status="warning" icon={<ArrowCircleUpIcon />} className="image-update-label">{_("Update available")}</Label>
+                </Tooltip>
+            );
+        } else if (update?.status === "current") {
+            updateLabel = <Label isCompact variant="outline" color="green" className="image-update-label">{_("Up to date")}</Label>;
+        } else if (update?.status === "error") {
+            updateLabel = (
+                <Tooltip content={update.message}>
+                    <Label isCompact variant="outline" color="grey" className="image-update-label">{_("Check failed")}</Label>
+                </Tooltip>
+            );
+        }
+
         const columns = [
-            { title: utils.image_name(image), header: true, props: { modifier: "breakWord" } },
+            { title: <>{utils.image_name(image)} {updateLabel}</>, sortKey: utils.image_name(image), header: true, props: { modifier: "breakWord" } },
             { title: (image.uid == 0) ? _("system") : <div><span className="ct-grey-text">{_("user:")} </span>{user.name}</div>, props: { className: "ignore-pixels", modifier: "nowrap" }, sortKey: user.name },
             { title: <utils.RelativeTime time={image.Created * 1000} />, props: { className: "image-created" }, sortKey: image.Created },
             { title: utils.truncate_id(image.Id), props: { className: "image-id" } },
@@ -292,6 +313,11 @@ class Images extends React.Component {
         );
 
         const { imageStats, unusedImages } = this.calculateStats();
+        const updateResults = Object.keys(this.props.images || {})
+                .map(key => this.props.imageUpdates?.[key])
+                .filter(Boolean);
+        const updatesAvailable = updateResults.filter(u => u.status === "update").length;
+        const lastChecked = updateResults.reduce((max, u) => Math.max(max, u.checked || 0), 0);
         const imageTitleStats = (
             <>
                 <Content component={ContentVariants.div}>
@@ -300,6 +326,14 @@ class Images extends React.Component {
                 {imageStats.unusedTotal !== 0 &&
                 <Content component={ContentVariants.div}>
                     {cockpit.format(cockpit.ngettext("$0 unused image, $1", "$0 unused images, $1", imageStats.unusedTotal), imageStats.unusedTotal, cockpit.format_bytes(imageStats.unusedSize))}
+                </Content>
+                }
+                {lastChecked > 0 &&
+                <Content component={ContentVariants.div} className={updatesAvailable ? "image-updates-summary image-updates-available" : "image-updates-summary"}>
+                    {updatesAvailable
+                        ? cockpit.format(cockpit.ngettext("$0 update available", "$0 updates available", updatesAvailable), updatesAvailable)
+                        : _("All images up to date")}
+                    {", "}{_("checked")} <utils.RelativeTime time={lastChecked} />
                 </Content>
                 }
             </>
@@ -318,10 +352,19 @@ class Images extends React.Component {
                             </Flex>
                         </FlexItem>
                         <FlexItem>
-                            <ImageOverActions handleDownloadNewImage={this.onOpenNewImagesDialog}
-                                              handlePullAllImages={this.onPullAllImages}
-                                              handlePruneUsedImages={this.onOpenPruneUnusedImagesDialog}
-                                              unusedImages={unusedImages} />
+                            <Flex spaceItems={{ default: 'spaceItemsSm' }} flexWrap={{ default: 'nowrap' }} alignItems={{ default: 'alignItemsCenter' }}>
+                                <Button id="images-check-updates" variant="secondary" size="sm"
+                                        icon={<SyncAltIcon />}
+                                        isLoading={this.props.imageUpdatesChecking}
+                                        isDisabled={this.props.imageUpdatesChecking || !this.props.images}
+                                        onClick={this.props.onCheckImageUpdates}>
+                                    {this.props.imageUpdatesChecking ? _("Checking…") : _("Check for updates")}
+                                </Button>
+                                <ImageOverActions handleDownloadNewImage={this.onOpenNewImagesDialog}
+                                                  handlePullAllImages={this.onPullAllImages}
+                                                  handlePruneUsedImages={this.onOpenPruneUnusedImagesDialog}
+                                                  unusedImages={unusedImages} />
+                            </Flex>
                         </FlexItem>
                     </Flex>
                 </CardHeader>

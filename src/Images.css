@@ -10,3 +10,13 @@
     --pf-v6-c-table--cell--PaddingBlockStart: 0.5rem;
     --pf-v6-c-table--cell--responsive--PaddingInlineEnd: 05rem;
 }
+
+.image-update-label {
+    margin-inline-start: var(--pf-t--global--spacer--sm);
+    vertical-align: middle;
+}
+
+.image-updates-available {
+    color: var(--pf-t--global--text--color--status--warning--default);
+    font-weight: var(--pf-t--global--font--weight--body--bold);
+}

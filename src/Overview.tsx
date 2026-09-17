@@ -79,6 +79,7 @@ export interface OverviewProps {
     pods: Record<string, Pod> | null;
     images: Record<string, Image> | null;
     ownerFilter: string | number;
+    imageUpdates?: Record<string, { status: string }>;
     onFilterChanged: (text: string) => void;
     onContainerFilterChanged: (value: string) => void;
 }
@@ -140,7 +141,7 @@ const Tile = ({ id, icon, title, value, detail, status }: TileProps) => (
 
 export const Overview = ({
     users, version, cgroupVersion, selinuxAvailable,
-    containers, containersStats, pods, images, ownerFilter,
+    containers, containersStats, pods, images, ownerFilter, imageUpdates,
     onFilterChanged, onContainerFilterChanged,
 }: OverviewProps) => {
     const [memTotal, setMemTotal] = useState<number>(0);
@@ -226,6 +227,7 @@ export const Overview = ({
     const imageList = Object.values(images ?? {}).filter(i => matchesOwner(i.uid, ownerFilter));
     const imagesSize = imageList.reduce((sum, i) => sum + (i.Size || 0), 0);
     const imagesUnused = imageList.filter(i => !usedImageKeys.has(i.key)).length;
+    const imagesOutdated = imageList.filter(i => imageUpdates?.[i.key]?.status === "update").length;
 
     // --- runtime ---
     const hasRootless = connected.some(u => u.uid !== 0);
@@ -306,10 +308,22 @@ export const Overview = ({
                           icon={<LayerGroupIcon />}
                           title={_("Images")}
                           value={loading ? skel : imageList.length}
+                          status={!loading && imagesOutdated > 0 ? "warning" : undefined}
                           detail={loading
                               ? null
-                              : cockpit.format_bytes(imagesSize) +
-                                (imagesUnused ? ` · ${cockpit.format(_("$0 unused"), imagesUnused)}` : "")} />
+                              : (
+                                  <>
+                                      {cockpit.format_bytes(imagesSize)}
+                                      {imagesUnused > 0 && ` · ${cockpit.format(_("$0 unused"), imagesUnused)}`}
+                                      {imagesOutdated > 0 &&
+                                          <>
+                                              {" · "}
+                                              <span className="podman-overview-uncapped">
+                                                  {cockpit.format(cockpit.ngettext("$0 update available", "$0 updates available", imagesOutdated), imagesOutdated)}
+                                              </span>
+                                          </>}
+                                  </>
+                              )} />
                     <Tile id="cpu"
                           icon={<MicrochipIcon />}
                           title={_("CPU")}
