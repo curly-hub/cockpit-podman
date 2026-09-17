@@ -7,11 +7,8 @@
 import React from 'react';
 
 import { Alert, AlertActionCloseButton, AlertGroup } from "@patternfly/react-core/dist/esm/components/Alert";
-import { Button } from "@patternfly/react-core/dist/esm/components/Button";
-import { EmptyState, EmptyStateFooter, EmptyStateActions, EmptyStateVariant } from "@patternfly/react-core/dist/esm/components/EmptyState";
 import { Page, PageSection, } from "@patternfly/react-core/dist/esm/components/Page";
 import { Stack } from "@patternfly/react-core/dist/esm/layouts/Stack";
-import { ExclamationCircleIcon } from '@patternfly/react-icons';
 import { WithDialogs } from "dialogs.jsx";
 
 import cockpit from 'cockpit';
@@ -23,9 +20,11 @@ import ContainerHeader from './ContainerHeader.tsx';
 import Containers from './Containers.jsx';
 import Images from './Images.jsx';
 import { Overview } from './Overview.tsx';
+import { PodmanDiagnostics } from './PodmanDiagnostics.tsx';
 import { Pods } from './Pods.tsx';
 import * as client from './client.js';
 import detect_quadlets from './detect-quadlets.py';
+import { diagnose } from './diagnostics.ts';
 import * as imageUpdates from './image-updates.ts';
 import rest from './rest.js';
 import { makeKey, WithPodmanInfo, debug } from './util.js';
@@ -73,6 +72,9 @@ class Application extends React.Component {
             // image key → { status, tag, checked, ... }, see image-updates.ts
             imageUpdates: imageUpdates.loadResults(),
             imageUpdatesChecking: false,
+            // "user" | "<uid>" → Diagnosis (see diagnostics.ts) for services that failed to initialize
+            diagnostics: {},
+            diagnosing: false,
             userPodmanRestartAvailable: false,
             userLingeringEnabled: null,
             location: {},
@@ -83,7 +85,6 @@ class Application extends React.Component {
         this.onOwnerChanged = this.onOwnerChanged.bind(this);
         this.onContainerFilterChanged = this.onContainerFilterChanged.bind(this);
         this.updateContainer = this.updateContainer.bind(this);
-        this.goToServicePage = this.goToServicePage.bind(this);
         this.onNavigate = this.onNavigate.bind(this);
         this.checkImageUpdates = this.checkImageUpdates.bind(this);
 
@@ -647,8 +648,11 @@ class Application extends React.Component {
                 // keep a nice sort order for dialogs
                 users.sort(compareUser);
                 debug("init uid", uid, "username", username, "new users:", users);
+                const diagnostics = { ...prevState.diagnostics };
+                delete diagnostics[uid === null ? "user" : String(uid)];
                 return {
                     users,
+                    diagnostics,
                     version: reply.version.Version,
                     registries: reply.registries,
                     cgroupVersion: reply.host.cgroupVersion,
@@ -660,6 +664,7 @@ class Application extends React.Component {
                 console.warn("init uid", uid, "getInfo failed:", err.toString());
 
             this.setState(prevState => ({ users: prevState.users.filter(u => u.uid !== uid) }));
+            this.diagnoseService(uid, username, err);
             return;
         }
 
@@ -836,6 +841,19 @@ class Application extends React.Component {
         this.setState({ userPodmanRestartAvailable: out.trim() === "loaded" });
     }
 
+    diagnoseService(uid, username, err) {
+        const system = uid === 0;
+        // a non-admin session cannot reach the system service; that is expected, not a failure to explain
+        if (system && err?.problem == 'access-denied' && this.state.users.some(u => u.uid === null))
+            return;
+        const key = uid === null ? "user" : String(uid);
+        this.setState({ diagnosing: true });
+        diagnose(uid, username, err)
+                .then(diagnosis => this.setState(prevState => ({ diagnostics: { ...prevState.diagnostics, [key]: diagnosis } })))
+                .catch(ex => console.warn("diagnose failed for uid", uid, ":", ex.toString()))
+                .finally(() => this.setState({ diagnosing: false }));
+    }
+
     checkImageUpdates() {
         if (!this.state.images || this.state.imageUpdatesChecking)
             return;
@@ -849,29 +867,18 @@ class Application extends React.Component {
         }).finally(() => this.setState({ imageUpdatesChecking: false }));
     }
 
-    goToServicePage(e) {
-        if (!e || e.button !== 0)
-            return;
-        cockpit.jump("/system/services#/podman.socket");
-    }
-
     render() {
-        // show troubleshoot if no users are available, i.e. all user's podman services failed
+        // all podman services failed: explain why instead of a generic error
         if (this.state.users.length === 0) {
             return (
-                <Page className="pf-m-no-sidebar">
-                    <PageSection hasBodyWrapper={false}>
-                        <EmptyState headingLevel="h2" icon={ExclamationCircleIcon} titleText={_("Podman service failed")} variant={EmptyStateVariant.full}>
-                            <EmptyStateFooter>
-                                <EmptyStateActions>
-                                    <Button variant="primary" onClick={this.goToServicePage}>
-                                        {_("Troubleshoot")}
-                                    </Button>
-                                </EmptyStateActions>
-                            </EmptyStateFooter>
-                        </EmptyState>
-                    </PageSection>
-                </Page>
+                <WithDialogs>
+                    <PodmanDiagnostics variant="page"
+                                       diagnoses={Object.values(this.state.diagnostics)}
+                                       pending={this.state.diagnosing}
+                                       lingering={this.state.userLingeringEnabled}
+                                       onRetry={(uid, name) => this.init(uid, name)}
+                                       onAddNotification={this.onAddNotification} />
+                </WithDialogs>
             );
         }
 
@@ -1009,6 +1016,13 @@ class Application extends React.Component {
                         </PageSection>
                         <PageSection hasBodyWrapper={false} className='ct-pagesection-mobile'>
                             <Stack hasGutter>
+                                {Object.keys(this.state.diagnostics).length > 0 &&
+                                    <PodmanDiagnostics variant="inline"
+                                                       diagnoses={Object.values(this.state.diagnostics)}
+                                                       pending={this.state.diagnosing}
+                                                       lingering={this.state.userLingeringEnabled}
+                                                       onRetry={(uid, name) => this.init(uid, name)}
+                                                       onAddNotification={this.onAddNotification} />}
                                 {overview}
                                 {podList}
                                 {imageList}

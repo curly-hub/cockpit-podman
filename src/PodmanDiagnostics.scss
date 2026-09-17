@@ -1,0 +1,64 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+@use "ct-card.scss";
+
+#app .pf-v6-c-card.podman-diagnosis {
+    @extend .ct-card;
+}
+
+.podman-diagnosis-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pf-t--global--spacer--md);
+    font-size: var(--pf-t--global--font--size--md);
+}
+
+.podman-diagnosis-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--pf-t--global--spacer--sm);
+}
+
+.podman-diagnosis-step {
+    display: grid;
+    grid-template-columns: auto minmax(10rem, max-content) 1fr;
+    column-gap: var(--pf-t--global--spacer--md);
+    align-items: baseline;
+    padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+    border-radius: var(--pf-t--global--border--radius--medium);
+    background-color: var(--pf-t--global--background--color--secondary--default);
+    border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--pf-t--global--border--color--default);
+
+    &.podman-diagnosis-step-ok {
+        border-inline-start-color: var(--pf-t--global--border--color--status--success--default);
+    }
+
+    &.podman-diagnosis-step-fail {
+        border-inline-start-color: var(--pf-t--global--border--color--status--danger--default);
+    }
+
+    &.podman-diagnosis-step-warn {
+        border-inline-start-color: var(--pf-t--global--border--color--status--warning--default);
+    }
+
+    @media (max-width: 600px) {
+        grid-template-columns: auto 1fr;
+
+        .podman-diagnosis-step-detail {
+            grid-column: 2;
+        }
+    }
+}
+
+.podman-diagnosis-step-title {
+    font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+.podman-diagnosis-step-detail {
+    color: var(--pf-t--global--text--color--subtle);
+    font-family: var(--pf-t--global--font--family--mono);
+    font-size: var(--pf-t--global--font--size--sm);
+    overflow-wrap: anywhere;
+}
