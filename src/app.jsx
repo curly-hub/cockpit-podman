@@ -22,6 +22,7 @@ import { superuser } from "superuser";
 import ContainerHeader from './ContainerHeader.tsx';
 import Containers from './Containers.jsx';
 import Images from './Images.jsx';
+import { Overview } from './Overview.tsx';
 import * as client from './client.js';
 import detect_quadlets from './detect-quadlets.py';
 import rest from './rest.js';
@@ -876,6 +877,22 @@ class Application extends React.Component {
         const loadingPods = this.state.users.find(u => u.con && !u.podsLoaded);
         const loadingQuadlets = this.state.users.find(u => u.con && !u.quadletsLoaded);
 
+        const overview = (
+            <Overview
+                key="overview"
+                users={this.state.users}
+                version={this.state.version}
+                cgroupVersion={this.state.cgroupVersion}
+                selinuxAvailable={this.state.selinuxAvailable}
+                containers={loadingContainers ? null : this.state.containers}
+                containersStats={this.state.containersStats}
+                pods={loadingPods ? null : (this.state.pods ?? null)}
+                images={loadingImages ? null : this.state.images}
+                ownerFilter={this.state.ownerFilter}
+                onFilterChanged={this.onFilterChanged}
+                onContainerFilterChanged={this.onContainerFilterChanged}
+            />
+        );
         const imageList = (
             <Images
                 key="imageList"
@@ -949,6 +966,7 @@ class Application extends React.Component {
                         </PageSection>
                         <PageSection hasBodyWrapper={false} className='ct-pagesection-mobile'>
                             <Stack hasGutter>
+                                {overview}
                                 {imageList}
                                 {containerList}
                             </Stack>

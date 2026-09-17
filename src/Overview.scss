@@ -1,0 +1,99 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+@use "ct-card.scss";
+
+#app .pf-v6-c-card.containers-overview {
+    @extend .ct-card;
+}
+
+.podman-overview-runtime-labels {
+    justify-content: flex-end;
+}
+
+.podman-overview-tile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pf-t--global--spacer--xs);
+    padding: var(--pf-t--global--spacer--md);
+    border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+    border-radius: var(--pf-t--global--border--radius--medium);
+    background-color: var(--pf-t--global--background--color--secondary--default);
+    min-inline-size: 0;
+}
+
+.podman-overview-tile-header {
+    display: flex;
+    align-items: center;
+    gap: var(--pf-t--global--spacer--sm);
+    color: var(--pf-t--global--text--color--subtle);
+    font-size: var(--pf-t--global--font--size--sm);
+    font-weight: var(--pf-t--global--font--weight--body--bold);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.podman-overview-tile-value {
+    font-size: var(--pf-t--global--font--size--3xl);
+    font-weight: var(--pf-t--global--font--weight--heading--bold);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.podman-overview-tile-detail {
+    color: var(--pf-t--global--text--color--subtle);
+    font-size: var(--pf-t--global--font--size--sm);
+    overflow-wrap: anywhere;
+}
+
+.podman-overview-tile-warning {
+    border-color: var(--pf-t--global--border--color--status--warning--default);
+
+    .podman-overview-uncapped {
+        color: var(--pf-t--global--text--color--status--warning--default);
+        text-decoration: underline dotted;
+    }
+}
+
+.podman-overview-tile-danger {
+    border-color: var(--pf-t--global--border--color--status--danger--default);
+}
+
+.podman-overview-attention {
+    margin-block-start: var(--pf-t--global--spacer--md);
+    padding: var(--pf-t--global--spacer--md);
+    border-radius: var(--pf-t--global--border--radius--medium);
+    border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--pf-t--global--border--color--status--success--default);
+    background-color: var(--pf-t--global--background--color--secondary--default);
+
+    &.podman-overview-attention-warning {
+        border-inline-start-color: var(--pf-t--global--border--color--status--warning--default);
+    }
+
+    &.podman-overview-attention-danger {
+        border-inline-start-color: var(--pf-t--global--border--color--status--danger--default);
+    }
+}
+
+.podman-overview-issues {
+    list-style: none;
+    margin: var(--pf-t--global--spacer--sm) 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--pf-t--global--spacer--xs);
+
+    li {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--pf-t--global--spacer--sm);
+    }
+}
+
+.podman-overview-issue-name {
+    font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+.podman-overview-issue-detail {
+    color: var(--pf-t--global--text--color--subtle);
+}
