@@ -12,7 +12,7 @@ import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex";
 import { Gallery } from "@patternfly/react-core/dist/esm/layouts/Gallery";
 import {
     CheckCircleIcon, CubeIcon, CubesIcon, ExclamationCircleIcon, ExclamationTriangleIcon,
-    LayerGroupIcon, MemoryIcon, MicrochipIcon, ServerIcon,
+    LayerGroupIcon, MemoryIcon, MicrochipIcon, RedoIcon, ServerIcon, StopCircleIcon,
 } from '@patternfly/react-icons';
 
 import cockpit from 'cockpit';
@@ -86,12 +86,28 @@ export interface OverviewProps {
 
 type Severity = "danger" | "warning";
 
+type IssueKind = "unhealthy" | "restart" | "exit" | "degraded";
+
 interface Issue {
     key: string;
     severity: Severity;
+    kind: IssueKind;
     name: string;
     detail: string;
 }
+
+const issueLabel = (issue: Issue) => {
+    switch (issue.kind) {
+    case "unhealthy":
+        return <Label status="danger" icon={<ExclamationCircleIcon />}>{_("Unhealthy")}</Label>;
+    case "restart":
+        return <Label status="warning" icon={<RedoIcon />}>{_("Restart loop")}</Label>;
+    case "exit":
+        return <Label status="warning" icon={<StopCircleIcon />}>{_("Failed")}</Label>;
+    default:
+        return <Label status="warning" icon={<ExclamationTriangleIcon />}>{_("Degraded")}</Label>;
+    }
+};
 
 const RESTART_LOOP_THRESHOLD = 3;
 
@@ -196,12 +212,13 @@ export const Overview = ({
         // HACK: Podman renamed `Healthcheck` to `Health`
         const health = c.State?.Health?.Status ?? c.State?.Healthcheck?.Status;
         if (health === "unhealthy") {
-            issues.push({ key: c.key + "-health", severity: "danger", name: c.Name, detail: _("Health check is failing") });
+            issues.push({ key: c.key + "-health", severity: "danger", kind: "unhealthy", name: c.Name, detail: _("Health check is failing") });
         }
         if (status === "restarting" || (status === "running" && (c.RestartCount ?? 0) >= RESTART_LOOP_THRESHOLD)) {
             issues.push({
                 key: c.key + "-restart",
                 severity: "warning",
+                kind: "restart",
                 name: c.Name,
                 detail: cockpit.format(_("Restarted $0 times, possible restart loop"), c.RestartCount ?? 0),
             });
@@ -210,6 +227,7 @@ export const Overview = ({
             issues.push({
                 key: c.key + "-exit",
                 severity: "warning",
+                kind: "exit",
                 name: c.Name,
                 detail: cockpit.format(_("Exited with code $0"), c.State?.ExitCode),
             });
@@ -221,7 +239,7 @@ export const Overview = ({
     const podsRunning = podList.filter(p => p.Status === "Running").length;
     const podsDegraded = podList.filter(p => p.Status === "Degraded");
     for (const p of podsDegraded)
-        issues.push({ key: p.key + "-degraded", severity: "warning", name: p.Name, detail: _("Pod is degraded, some containers are not running") });
+        issues.push({ key: p.key + "-degraded", severity: "warning", kind: "degraded", name: p.Name, detail: _("Pod is degraded, some containers are not running") });
 
     // --- images ---
     const imageList = Object.values(images ?? {}).filter(i => matchesOwner(i.uid, ownerFilter));
@@ -378,9 +396,7 @@ export const Overview = ({
                         <ul className="podman-overview-issues">
                             {issues.map(issue => (
                                 <li key={issue.key}>
-                                    <Label isCompact status={issue.severity}>
-                                        {issue.severity === "danger" ? _("Unhealthy") : _("Warning")}
-                                    </Label>
+                                    {issueLabel(issue)}
                                     <Button variant="link" isInline className="podman-overview-issue-name"
                                             onClick={() => { onFilterChanged(issue.name); showContainers("all") }}>
                                         {issue.name}

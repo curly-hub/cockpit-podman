@@ -10,7 +10,7 @@
 }
 
 .podman-pod-name {
-    font-size: var(--pf-t--global--font--size--lg);
+    font-size: var(--pf-t--global--font--size--xl);
     font-weight: var(--pf-t--global--font--weight--body--bold);
     text-align: start;
     overflow-wrap: anywhere;
@@ -25,7 +25,7 @@
 .podman-pod-facts,
 .podman-pod-uncapped {
     color: var(--pf-t--global--text--color--subtle);
-    font-size: var(--pf-t--global--font--size--sm);
+    font-size: var(--pf-t--global--font--size--md);
 }
 
 .podman-pod-uncapped {

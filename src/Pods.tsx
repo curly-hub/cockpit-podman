@@ -11,7 +11,10 @@ import { Skeleton } from "@patternfly/react-core/dist/esm/components/Skeleton";
 import { Tooltip } from "@patternfly/react-core/dist/esm/components/Tooltip";
 import { Flex } from "@patternfly/react-core/dist/esm/layouts/Flex";
 import { Gallery } from "@patternfly/react-core/dist/esm/layouts/Gallery";
-import { CubesIcon } from '@patternfly/react-icons';
+import {
+    CheckCircleIcon, CubesIcon, ExclamationCircleIcon, ExclamationTriangleIcon, InfoCircleIcon,
+    PauseCircleIcon, RedoIcon, StopCircleIcon,
+} from '@patternfly/react-icons';
 import { useDialogs, DialogsContext } from "dialogs.jsx";
 
 import cockpit from 'cockpit';
@@ -115,17 +118,17 @@ function statusLabel(status: string) {
     // https://github.com/containers/podman/blob/main/libpod/define/podstate.go
     switch (status) {
     case "Running":
-        return <Label isCompact status="success">{_("Running")}</Label>;
+        return <Label status="success" icon={<CheckCircleIcon />}>{_("Running")}</Label>;
     case "Degraded":
-        return <Label isCompact status="warning">{_("Degraded")}</Label>;
+        return <Label status="warning" icon={<ExclamationTriangleIcon />}>{_("Degraded")}</Label>;
     case "Paused":
-        return <Label isCompact status="info">{_("Paused")}</Label>;
+        return <Label status="info" icon={<PauseCircleIcon />}>{_("Paused")}</Label>;
     case "Error":
-        return <Label isCompact status="danger">{_("Error")}</Label>;
+        return <Label status="danger" icon={<ExclamationCircleIcon />}>{_("Error")}</Label>;
     case "Created":
-        return <Label isCompact color="grey">{_("Created")}</Label>;
+        return <Label color="grey" icon={<InfoCircleIcon />}>{_("Created")}</Label>;
     default:
-        return <Label isCompact color="grey">{_("Stopped")}</Label>;
+        return <Label color="grey" icon={<StopCircleIcon />}>{_("Stopped")}</Label>;
     }
 }
 
@@ -137,6 +140,19 @@ function containerLabelColor(status: string, unhealthy: boolean): "green" | "red
     if (status === "restarting")
         return "orange";
     return "grey";
+}
+
+/* Icon carrying the same meaning as the colour, for colour-blind users and screen readers */
+function containerLabelIcon(status: string, unhealthy: boolean, looping: boolean) {
+    if (unhealthy)
+        return <ExclamationCircleIcon />;
+    if (looping || status === "restarting")
+        return <RedoIcon />;
+    if (status === "running")
+        return <CheckCircleIcon />;
+    if (status === "paused")
+        return <PauseCircleIcon />;
+    return <StopCircleIcon />;
 }
 
 const statusOrder: Record<string, number> = { Running: 0, Degraded: 1, Paused: 2, Error: 3 };
@@ -291,12 +307,14 @@ export const Pods = ({
                     <LabelGroup numLabels={6}>
                         {statusLabel(pod.Status)}
                         {unhealthy > 0 &&
-                            <Label isCompact status="danger">{cockpit.format(cockpit.ngettext("$0 unhealthy", "$0 unhealthy", unhealthy), unhealthy)}</Label>}
+                            <Label status="danger" icon={<ExclamationCircleIcon />}>{cockpit.format(cockpit.ngettext("$0 unhealthy", "$0 unhealthy", unhealthy), unhealthy)}</Label>}
                         {looping > 0 &&
-                            <Label isCompact status="warning">{cockpit.format(cockpit.ngettext("$0 restart loop", "$0 restart loops", looping), looping)}</Label>}
-                        {isPodService && <Label isCompact color="purple">{_("systemd")}</Label>}
+                            <Label status="warning" icon={<RedoIcon />}>{cockpit.format(cockpit.ngettext("$0 restart loop", "$0 restart loops", looping), looping)}</Label>}
+                        {unhealthy === 0 && looping === 0 && isRunning && members.length > 0 &&
+                            <Label color="green" variant="outline" icon={<CheckCircleIcon />}>{_("Healthy")}</Label>}
+                        {isPodService && <Label color="purple">{_("systemd")}</Label>}
                         {users.filter(u => u.con).length > 1 && user &&
-                            <Label isCompact color="grey">{pod.uid === 0 ? _("system") : user.name}</Label>}
+                            <Label color="grey">{pod.uid === 0 ? _("system") : user.name}</Label>}
                     </LabelGroup>
 
                     <div className="podman-pod-facts">
@@ -330,7 +348,8 @@ export const Pods = ({
                         <LabelGroup numLabels={8} className="podman-pod-containers">
                             {memberDetails.map(m => (
                                 <Tooltip key={m.ref.Id} content={m.isUnhealthy ? _("Health check is failing") : (m.isLooping ? _("Possible restart loop") : m.status)}>
-                                    <Label isCompact variant="outline" color={containerLabelColor(m.status, m.isUnhealthy)}
+                                    <Label variant="outline" color={containerLabelColor(m.status, m.isUnhealthy)}
+                                           icon={containerLabelIcon(m.status, m.isUnhealthy, m.isLooping)}
                                            onClick={() => focusTable(m.name, m.status !== "running")}>
                                         {m.name}
                                     </Label>

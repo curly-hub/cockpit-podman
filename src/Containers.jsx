@@ -8,9 +8,11 @@ import { Content, ContentVariants } from "@patternfly/react-core/dist/esm/compon
 import { Divider } from "@patternfly/react-core/dist/esm/components/Divider";
 import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
 import { FormSelect, FormSelectOption } from "@patternfly/react-core/dist/esm/components/FormSelect";
+import { Icon } from "@patternfly/react-core/dist/esm/components/Icon";
 import { LabelGroup } from "@patternfly/react-core/dist/esm/components/Label";
 import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core/dist/esm/components/Toolbar";
 import { Flex } from "@patternfly/react-core/dist/esm/layouts/Flex";
+import { CheckCircleIcon, ExclamationCircleIcon, InProgressIcon } from '@patternfly/react-icons';
 import { cellWidth, SortByDirection } from '@patternfly/react-table';
 import { KebabDropdown } from "cockpit-components-dropdown.jsx";
 import { useDialogs, DialogsContext } from "dialogs.jsx";
@@ -485,8 +487,18 @@ class Containers extends React.Component {
         const state = [<Badge key={containerState} isRead className={containerStateClass}>{_(containerState)}</Badge>]; // States are defined in util.js
         if (healthcheck) {
             localized_health = localize_health(healthcheck);
-            if (localized_health)
-                state.push(<Badge key={healthcheck} isRead className={`ct-badge-container-${healthcheck}`}>{localized_health}</Badge>);
+            if (localized_health) {
+                let healthIcon = <InProgressIcon />;
+                if (healthcheck === "healthy")
+                    healthIcon = <CheckCircleIcon />;
+                else if (healthcheck === "unhealthy")
+                    healthIcon = <ExclamationCircleIcon />;
+                state.push(
+                    <Badge key={healthcheck} isRead className={`ct-badge-container-${healthcheck} ct-badge-with-icon`}>
+                        <Icon isInline>{healthIcon}</Icon> {localized_health}
+                    </Badge>
+                );
+            }
         }
 
         const user = this.props.users.find(user => user.uid === container.uid);

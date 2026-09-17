@@ -9,7 +9,7 @@ import { ExpandableSection } from "@patternfly/react-core/dist/esm/components/Ex
 import { Label } from "@patternfly/react-core/dist/esm/components/Label";
 import { Tooltip } from "@patternfly/react-core/dist/esm/components/Tooltip";
 import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex";
-import { ArrowCircleUpIcon, SyncAltIcon } from '@patternfly/react-icons';
+import { ArrowCircleUpIcon, CheckCircleIcon, ExclamationTriangleIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { cellWidth, SortByDirection } from '@patternfly/react-table';
 import { KebabDropdown } from "cockpit-components-dropdown.jsx";
 import { useDialogs, DialogsContext } from "dialogs.jsx";
@@ -152,11 +152,11 @@ class Images extends React.Component {
                 </Tooltip>
             );
         } else if (update?.status === "current") {
-            updateLabel = <Label isCompact variant="outline" color="green" className="image-update-label">{_("Up to date")}</Label>;
+            updateLabel = <Label isCompact variant="outline" color="green" icon={<CheckCircleIcon />} className="image-update-label">{_("Up to date")}</Label>;
         } else if (update?.status === "error") {
             updateLabel = (
                 <Tooltip content={update.message}>
-                    <Label isCompact variant="outline" color="grey" className="image-update-label">{_("Check failed")}</Label>
+                    <Label isCompact variant="outline" color="grey" icon={<ExclamationTriangleIcon />} className="image-update-label">{_("Check failed")}</Label>
                 </Tooltip>
             );
         }

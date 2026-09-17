@@ -119,3 +119,10 @@
         padding: 0;
     }
 }
+
+// health badges carry an icon in addition to the colour
+.ct-badge-with-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--pf-t--global--spacer--xs);
+}

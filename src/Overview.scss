@@ -25,14 +25,14 @@
     align-items: center;
     gap: var(--pf-t--global--spacer--sm);
     color: var(--pf-t--global--text--color--subtle);
-    font-size: var(--pf-t--global--font--size--sm);
+    font-size: var(--pf-t--global--font--size--md);
     font-weight: var(--pf-t--global--font--weight--body--bold);
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
 .podman-overview-tile-value {
-    font-size: var(--pf-t--global--font--size--3xl);
+    font-size: var(--pf-t--global--font--size--4xl);
     font-weight: var(--pf-t--global--font--weight--heading--bold);
     line-height: 1.1;
     font-variant-numeric: tabular-nums;
@@ -41,7 +41,7 @@
 
 .podman-overview-tile-detail {
     color: var(--pf-t--global--text--color--subtle);
-    font-size: var(--pf-t--global--font--size--sm);
+    font-size: var(--pf-t--global--font--size--md);
     overflow-wrap: anywhere;
 }
 
