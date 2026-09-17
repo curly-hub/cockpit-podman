@@ -12,21 +12,27 @@
 
 .podman-pod-card {
     block-size: 100%;
+}
 
-    // Cockpit's PatternFly override sets flex-wrap: wrap on card headers, which pushes the
-    // kebab menu below a long pod name. Keep title and menu on one row; the name wraps instead.
-    > .pf-v6-c-card__header {
-        flex-wrap: nowrap;
-        align-items: flex-start;
+// Cockpit's PatternFly override (.pf-v6-c-card .pf-v6-c-card__header) wraps card headers, which
+// pushed the kebab below a long pod name. The header opts out via ct-card-expandable-header; this
+// rule has higher specificity as a belt-and-braces measure. The name wraps inside the title instead.
+#app .pf-v6-c-card.podman-pod-card > .pf-v6-c-card__header.podman-pod-header {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: var(--pf-t--global--spacer--sm);
 
-        .pf-v6-c-card__header-main {
-            flex: 1 1 auto;
-            min-inline-size: 0;
-        }
+    > .pf-v6-c-card__header-main {
+        flex: 1 1 auto;
+        min-inline-size: 0;
+        display: block;
+    }
 
-        > .pf-v6-c-card__actions {
-            flex: 0 0 auto;
-        }
+    > .pf-v6-c-card__actions {
+        flex: 0 0 auto;
+        margin: 0;
+        padding: 0;
     }
 }
 

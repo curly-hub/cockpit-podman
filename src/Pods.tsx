@@ -290,7 +290,8 @@ export const Pods = ({
 
         return (
             <Card isCompact key={pod.key} className="podman-pod-card" id={`podman-pod-${pod.Id.slice(0, 12)}`}>
-                <CardHeader actions={{
+                {/* ct-card-expandable-header opts out of Cockpit's wrapping card-header override */}
+                <CardHeader className="ct-card-expandable-header podman-pod-header" actions={{
                     actions: user?.con
                         ? <PodActions con={user.con} pod={pod} onAddNotification={onAddNotification} isPodService={isPodService}
                                       onCreateContainer={images ? () => createContainer(pod) : null} />
