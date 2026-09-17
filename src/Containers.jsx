@@ -9,11 +9,8 @@ import { Divider } from "@patternfly/react-core/dist/esm/components/Divider";
 import { DropdownItem } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
 import { FormSelect, FormSelectOption } from "@patternfly/react-core/dist/esm/components/FormSelect";
 import { LabelGroup } from "@patternfly/react-core/dist/esm/components/Label";
-import { Popover } from "@patternfly/react-core/dist/esm/components/Popover";
 import { Toolbar, ToolbarContent, ToolbarItem } from "@patternfly/react-core/dist/esm/components/Toolbar";
-import { Tooltip } from "@patternfly/react-core/dist/esm/components/Tooltip";
 import { Flex } from "@patternfly/react-core/dist/esm/layouts/Flex";
-import { MicrochipIcon, MemoryIcon, PortIcon, VolumeIcon, } from '@patternfly/react-icons';
 import { cellWidth, SortByDirection } from '@patternfly/react-table';
 import { KebabDropdown } from "cockpit-components-dropdown.jsx";
 import { useDialogs, DialogsContext } from "dialogs.jsx";
@@ -29,14 +26,13 @@ import ContainerCommitModal from './ContainerCommitModal.jsx';
 import ContainerDeleteModal from './ContainerDeleteModal.jsx';
 import ContainerDetails from './ContainerDetails.jsx';
 import ContainerHealthLogs from './ContainerHealthLogs.jsx';
-import ContainerIntegration, { renderContainerPublishedPorts, renderContainerVolumes } from './ContainerIntegration.jsx';
+import ContainerIntegration from './ContainerIntegration.jsx';
 import ContainerLogs from './ContainerLogs.jsx';
 import ContainerRenameModal from './ContainerRenameModal.jsx';
 import ContainerRestoreModal from './ContainerRestoreModal.jsx';
 import ContainerTerminal from './ContainerTerminal.jsx';
 import ForceRemoveModal from './ForceRemoveModal.jsx';
 import { ImageRunModal } from './ImageRunModal.jsx';
-import { PodActions } from './PodActions.jsx';
 import { PodCreateModal } from './PodCreateModal.jsx';
 import PruneUnusedContainersModal from './PruneUnusedContainersModal.jsx';
 import * as client from './client.js';
@@ -420,7 +416,7 @@ class Containers extends React.Component {
                 </utils.PodmanInfoContext.Consumer>);
     }
 
-    renderRow(containersStats, container, localImages) {
+    renderRow(containersStats, container, localImages, podLookup) {
         const containerStats = containersStats[container.key];
         const image = container.ImageName;
         const isToolboxContainer = container.Config?.Labels?.["com.github.containers.toolbox"] === "true";
@@ -497,8 +493,24 @@ class Containers extends React.Component {
         const user = this.props.users.find(user => user.uid === container.uid);
         cockpit.assert(user, `User not found for container uid ${container.uid}`);
 
+        let podCell = <span className="ct-grey-text">{_("none")}</span>;
+        let podName = "";
+        if (container.Pod) {
+            const pod = podLookup?.[utils.makeKey(container.uid, container.Pod)];
+            if (pod) {
+                podName = pod.Name;
+                podCell = (
+                    <Button variant="link" isInline className="container-pod-link"
+                            onClick={() => document.getElementById(`podman-pod-${pod.Id.slice(0, 12)}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}>
+                        {pod.Name}
+                    </Button>
+                );
+            }
+        }
+
         const columns = [
             { title: info_block, sortKey: container.Name ?? container.Id },
+            { title: podCell, props: { modifier: "nowrap" }, sortKey: podName },
             {
                 title: (container.uid === 0) ? _("system") : <div><span className="ct-grey-text">{_("user:")} </span>{user.name}</div>,
                 props: { modifier: "nowrap" },
@@ -592,100 +604,6 @@ class Containers extends React.Component {
         this.setState({ width: this.cardRef.current.clientWidth });
     }
 
-    podStats(pod) {
-        const { containersStats } = this.props;
-        // when no containers exists pod.Containers is null
-        if (!containersStats || !pod.Containers) {
-            return null;
-        }
-
-        // As podman does not provide per pod memory/cpu statistics we do the following:
-        // - add up CPU usage to display total CPU use of all containers in the pod
-        // - add up memory usage so it displays the total memory of the pod.
-        let cpu = 0;
-        let mem = 0;
-        for (const container of pod.Containers) {
-            const containerStats = containersStats[utils.makeKey(pod.uid, container.Id)];
-            if (!containerStats)
-                continue;
-
-            if (containerStats.CPU != undefined) {
-                cpu += containerStats.CPU;
-            }
-            if (containerStats.MemUsage != undefined) {
-                mem += containerStats.MemUsage;
-            }
-        }
-
-        return {
-            cpu: cpu.toFixed(2),
-            mem,
-        };
-    }
-
-    renderPodDetails(pod, podStatus) {
-        const podStats = this.podStats(pod);
-        const infraContainer = this.props.containers[utils.makeKey(pod.uid, pod.InfraId)];
-        const numPorts = Object.keys(infraContainer?.NetworkSettings?.Ports ?? {}).length;
-
-        return (
-            <>
-                {podStats && podStatus === "Running" &&
-                    <>
-                        <Flex className='pod-stat' spaceItems={{ default: 'spaceItemsSm' }}>
-                            <Tooltip content={_("CPU")}>
-                                <MicrochipIcon />
-                            </Tooltip>
-                            <Content component={ContentVariants.p} className="pf-v6-u-hidden-on-sm">{_("CPU")}</Content>
-                            <Content component={ContentVariants.p} className="pod-cpu">{podStats.cpu}%</Content>
-                        </Flex>
-                        <Flex className='pod-stat' spaceItems={{ default: 'spaceItemsSm' }}>
-                            <Tooltip content={_("Memory")}>
-                                <MemoryIcon />
-                            </Tooltip>
-                            <Content component={ContentVariants.p} className="pf-v6-u-hidden-on-sm">{_("Memory")}</Content>
-                            <Content component={ContentVariants.p} className="pod-memory">{cockpit.format_bytes(podStats.mem)}</Content>
-                        </Flex>
-                    </>
-                }
-                {infraContainer &&
-                <>
-                    {numPorts > 0 &&
-                        <Tooltip content={_("Click to see published ports")}>
-                            <Popover
-                              enableFlip
-                              bodyContent={renderContainerPublishedPorts(infraContainer.NetworkSettings.Ports)}
-                            >
-                                <Button size="sm" variant="link" className="pod-details-button pod-details-ports-btn"
-                                        icon={<PortIcon className="pod-details-button-color" />}
-                                >
-                                    {numPorts}
-                                    <Content component={ContentVariants.p} className="pf-v6-u-hidden-on-sm">{_("ports")}</Content>
-                                </Button>
-                            </Popover>
-                        </Tooltip>
-                    }
-                    {infraContainer.Mounts && infraContainer.Mounts.length !== 0 &&
-                    <Tooltip content={_("Click to see volumes")}>
-                        <Popover
-                      enableFlip
-                      bodyContent={renderContainerVolumes(infraContainer.Mounts)}
-                        >
-                            <Button size="sm" variant="link" className="pod-details-button pod-details-volumes-btn"
-                            icon={<VolumeIcon className="pod-details-button-color" />}
-                            >
-                                {infraContainer.Mounts.length}
-                                <Content component={ContentVariants.p} className="pf-v6-u-hidden-on-sm">{_("volumes")}</Content>
-                            </Button>
-                        </Popover>
-                    </Tooltip>
-                    }
-                </>
-                }
-            </>
-        );
-    }
-
     onOpenPruneUnusedContainersDialog = () => {
         this.setState({ showPruneUnusedContainersModal: true });
     };
@@ -753,20 +671,20 @@ class Containers extends React.Component {
     render() {
         const columnTitles = [
             { title: _("Container"), transforms: [cellWidth(20)], sortable: true },
+            { title: _("Pod"), sortable: true },
             { title: _("Owner"), sortable: true },
             { title: _("CPU"), sortable: true, props: { className: 'ct-numeric-column' } },
             { title: _("Memory"), sortable: true, props: { className: 'ct-numeric-column' } },
             { title: _("State"), sortable: true },
             { title: "", sortable: false, props: { screenReaderText: _("Actions") } },
         ];
-        /** @type Record<string, string[]> */
-        const partitionedContainers = { 'no-pod': [] };
+        const listContainers = [];
         const unusedContainers = [];
         const isLoaded = this.props.containers !== null && this.props.pods !== null && this.props.quadletContainers !== null && this.props.quadletPods !== null;
-        let pods;
+        // pod key (podman ID or quadlet unit name) → pod, for the "Pod" column
+        const podLookup = {};
 
         let emptyCaption = _("No containers");
-        const emptyCaptionPod = _("No containers in this pod");
         if (!isLoaded)
             emptyCaption = _("Loading...");
         else if (this.props.textFilter.length > 0)
@@ -775,88 +693,37 @@ class Containers extends React.Component {
             emptyCaption = _("No running containers");
 
         if (isLoaded) {
-            const filtered = this.filterContainers(this.props.containers);
-            pods = { ...this.props.pods };
-            /**
-             * Mapping of systemd service name to pod ID.
-             * @type Record<string, string>
-             **/
-            const podServiceNameIdMap = {};
-
             Object.values(this.props.pods).forEach(pod => {
+                podLookup[pod.key] = pod;
                 const service_name = pod?.Labels?.PODMAN_SYSTEMD_UNIT;
-                if (service_name) {
-                    const key = utils.makeKey(pod.uid, service_name);
-                    podServiceNameIdMap[key] = utils.makeKey(pod.uid, pod.Id);
-                }
+                if (service_name)
+                    podLookup[utils.makeKey(pod.uid, service_name)] = pod;
             });
-
-            // Add inactive quadlet pods to the `pods` state
-            Object.keys(this.props.quadletPods).forEach(key => {
-                const values = this.props.quadletPods[key];
-                if (!(utils.makeKey(values.uid, values.Labels.PODMAN_SYSTEMD_UNIT) in podServiceNameIdMap)) {
-                    pods[key] = values;
-                }
+            Object.values(this.props.quadletPods).forEach(pod => {
+                if (!(pod.key in podLookup))
+                    podLookup[pod.key] = pod;
             });
-
-            Object.keys(pods).forEach(pod => { partitionedContainers[pod] = [] });
 
             // Set of running quadlets ($id-$name.service)
             const running_quadlets = new Set();
-            filtered.forEach(id => {
+            this.filterContainers(this.props.containers).forEach(id => {
                 const container = this.props.containers[id];
                 if (container) {
-                    (partitionedContainers[container.Pod ? utils.makeKey(container.uid, container.Pod) : 'no-pod'] || []).push(container);
+                    listContainers.push(container);
                     const service_name = container?.Config?.Labels?.PODMAN_SYSTEMD_UNIT;
                     if (service_name)
                         running_quadlets.add(utils.makeKey(container.uid, service_name));
                 }
             });
 
-            // Combine the podman containers with inactive quadlets, active
-            // quadlets have a running container or pod associated with them
-            const filteredQuadlets = this.filterContainers(this.props.quadletContainers);
-            filteredQuadlets.forEach(id => {
-                if (!running_quadlets.has(id)) {
-                    const cont = this.props.quadletContainers[id];
-                    const podKey = utils.makeKey(cont.uid, cont.Pod);
-                    // Quadlet container with a pod
-                    if (cont.Pod && !(podKey in podServiceNameIdMap)) {
-                        // Containers and pod state aren't updated in sync
-                        if (podKey in partitionedContainers)
-                            partitionedContainers[podKey].push(cont);
-                    // Stopped container but pod is running, find the pod ID via our mapping
-                    } else if (cont.Pod && podKey in podServiceNameIdMap) {
-                        partitionedContainers[podServiceNameIdMap[podKey]].push(cont);
-                    } else {
-                        partitionedContainers['no-pod'].push(cont);
-                    }
-                }
+            // Inactive quadlets; active ones already have a running container
+            this.filterContainers(this.props.quadletContainers).forEach(id => {
+                if (!running_quadlets.has(id))
+                    listContainers.push(this.props.quadletContainers[id]);
             });
 
             // Append downloading containers
-            this.state.downloadingContainers.forEach(cont => {
-                partitionedContainers['no-pod'].push(cont);
-            });
-
-            // Apply filters to pods
-            Object.keys(partitionedContainers).forEach(section => {
-                const lcf = this.props.textFilter.toLowerCase();
-                if (section != "no-pod") {
-                    const pod = pods[section];
-                    if ((this.props.filter == "running" && pod.Status != "Running") ||
-                        // If nor the pod name nor any container inside the pod fit the filter, hide the whole pod
-                        (!partitionedContainers[section].length && (pod.Name.toLowerCase().indexOf(lcf) < 0 ||
-                          pod.Labels?.PODMAN_SYSTEMD_UNIT?.toLowerCase().indexOf(lcf) < 0)) ||
-                        (this.props.ownerFilter !== "all" &&
-                         ((this.props.ownerFilter === "user" && pod.uid !== null) ||
-                            (this.props.ownerFilter !== "user" && pod.uid !== this.props.ownerFilter))))
-                        delete partitionedContainers[section];
-                }
-            });
-            // If there are pods to show and the generic container list is empty don't show  it at all
-            if (Object.keys(partitionedContainers).length > 1 && !partitionedContainers["no-pod"].length)
-                delete partitionedContainers["no-pod"];
+            this.state.downloadingContainers.forEach(cont => listContainers.push(cont));
 
             const prune_states = ["created", "configured", "stopped", "exited"];
             for (const containerid of Object.keys(this.props.containers)) {
@@ -925,8 +792,8 @@ class Containers extends React.Component {
         );
 
         const sortRows = (rows, direction, idx) => {
-            // CPU / Memory /States
-            const isNumeric = idx == 2 || idx == 3 || idx == 4;
+            // CPU / Memory / State
+            const isNumeric = idx == 3 || idx == 4 || idx == 5;
             const stateOrderMapping = {};
             utils.states.forEach((elem, index) => {
                 stateOrderMapping[elem] = index;
@@ -935,7 +802,7 @@ class Containers extends React.Component {
                 let aitem = a.columns[idx].sortKey ?? a.columns[idx].title;
                 let bitem = b.columns[idx].sortKey ?? b.columns[idx].title;
                 // Sort the states based on the order defined in utils. so Running first.
-                if (idx === 4) {
+                if (idx === 5) {
                     aitem = stateOrderMapping[aitem];
                     bitem = stateOrderMapping[bitem];
                 }
@@ -954,91 +821,15 @@ class Containers extends React.Component {
                     <CardTitle><Content component={ContentVariants.h1}>{_("Containers")}</Content></CardTitle>
                 </CardHeader>
                 <CardBody>
-                    <Flex direction={{ default: 'column' }}>
-                        {(!isLoaded)
-                            ? <ListingTable variant='compact'
-                                            aria-label={_("Containers")}
-                                            emptyCaption={emptyCaption}
-                                            columns={columnTitles}
-                                            sortMethod={sortRows}
-                                            rows={[]}
-                                            sortBy={{ index: 0, direction: SortByDirection.asc }} />
-                            : Object.keys(partitionedContainers)
-                                    .sort((a, b) => {
-                                        if (a == "no-pod") return -1;
-                                        else if (b == "no-pod") return 1;
-
-                                        // User pods are in front of system ones
-                                        if (pods[a].uid !== pods[b].uid)
-                                            return pods[a].uid === 0 ? 1 : -1;
-                                        return pods[a].Name > pods[b].Name ? 1 : -1;
-                                    })
-                                    .map(section => {
-                                        const tableProps = {};
-                                        const rows = partitionedContainers[section].map(container => {
-                                            return this.renderRow(this.props.containersStats, container,
-                                                                  localImages);
-                                        });
-                                        let caption;
-                                        let podStatus;
-                                        let pod;
-                                        let isPodService = false;
-                                        let con;
-                                        if (section !== 'no-pod') {
-                                            pod = pods[section];
-                                            con = this.props.users.find(u => u.uid === pod.uid).con;
-                                            tableProps['aria-label'] = cockpit.format("Containers of pod $0", pod.Name);
-                                            podStatus = pod.Status;
-                                            isPodService = Boolean(pod.Labels?.PODMAN_SYSTEMD_UNIT);
-                                            caption = pod.Name;
-                                        } else {
-                                            tableProps['aria-label'] = _("Containers");
-                                        }
-
-                                        const actions = caption && (
-                                            <>
-                                                <Badge isRead className={`ct-badge-pod-${podStatus.toLowerCase()}`}>{_(podStatus)}</Badge>
-                                                {!isPodService &&
-                                                <Button variant="secondary"
-                                                        className="create-container-in-pod"
-                                                        isDisabled={nonIntermediateImages === null}
-                                                        onClick={() => this.createContainer(nonIntermediateImages, this.props.pods[section])}>
-                                                    {_("Create container in pod")}
-                                                </Button>}
-                                                <PodActions con={con}
-                                                            onAddNotification={this.props.onAddNotification}
-                                                            pod={pod}
-                                                            isPodService={isPodService}
-                                                />
-                                            </>
-                                        );
-                                        return (
-                                            <Card key={`table-${section}`}
-                                             id={`table-${section == "no-pod" ? section : pods[section].Name}`}
-                                             isPlain={section == "no-pod"}
-                                             className="container-pod"
-                                             isClickable
-                                             isSelectable>
-                                                {caption && <CardHeader actions={{ actions, className: "panel-actions" }}>
-                                                    <CardTitle>
-                                                        <Flex justifyContent={{ default: 'justifyContentFlexStart' }}>
-                                                            <h3 className='pod-name'>{caption}</h3>
-                                                            <span>{_("pod")}</span>
-                                                            {isPodService && <Badge className='ct-badge-service'>{_("service")}</Badge>}
-                                                            {this.renderPodDetails(pods[section], podStatus)}
-                                                        </Flex>
-                                                    </CardTitle>
-                                                </CardHeader>}
-                                                <ListingTable variant='compact'
-                                                          emptyCaption={section == "no-pod" ? emptyCaption : emptyCaptionPod}
-                                                          columns={columnTitles}
-                                                          sortMethod={sortRows}
-                                                          rows={rows}
-                                                          {...tableProps} />
-                                            </Card>
-                                        );
-                                    })}
-                    </Flex>
+                    <ListingTable variant='compact'
+                                  aria-label={_("Containers")}
+                                  emptyCaption={emptyCaption}
+                                  columns={columnTitles}
+                                  sortMethod={sortRows}
+                                  rows={isLoaded
+                                      ? listContainers.map(container => this.renderRow(this.props.containersStats, container, localImages, podLookup))
+                                      : []}
+                                  sortBy={{ index: 0, direction: SortByDirection.asc }} />
                     {this.state.showPruneUnusedContainersModal &&
                     <PruneUnusedContainersModal
                       close={() => this.setState({ showPruneUnusedContainersModal: false })}

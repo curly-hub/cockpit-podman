@@ -76,7 +76,7 @@ const PodDeleteModal = ({ con, pod }) => {
     );
 };
 
-export const PodActions = ({ con, onAddNotification, pod, isPodService }) => {
+export const PodActions = ({ con, onAddNotification, pod, isPodService, onCreateContainer }) => {
     const Dialogs = useDialogs();
 
     const startPod = () => {
@@ -128,6 +128,17 @@ export const PodActions = ({ con, onAddNotification, pod, isPodService }) => {
     };
 
     const dropdownItems = [];
+    if (onCreateContainer && !isPodService) {
+        dropdownItems.push(
+            <DropdownItem key="action-create-container"
+                          className="pod-action-create-container"
+                          onClick={onCreateContainer}
+                          component="button">
+                {_("Create container in pod")}
+            </DropdownItem>,
+            <Divider key="divider-create-container" />,
+        );
+    }
     // Possible Pod Statuses can be found here https://github.com/containers/podman/blob/main/libpod/define/podstate.go
     if (pod.Status == "Running" || pod.Status == "Paused") {
         dropdownItems.push(<DropdownItem key="action-stop"

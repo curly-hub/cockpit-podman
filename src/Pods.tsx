@@ -12,12 +12,14 @@ import { Tooltip } from "@patternfly/react-core/dist/esm/components/Tooltip";
 import { Flex } from "@patternfly/react-core/dist/esm/layouts/Flex";
 import { Gallery } from "@patternfly/react-core/dist/esm/layouts/Gallery";
 import { CubesIcon } from '@patternfly/react-icons';
+import { useDialogs, DialogsContext } from "dialogs.jsx";
 
 import cockpit from 'cockpit';
 import * as machine_info from 'machine-info';
 
+import { ImageRunModal } from './ImageRunModal.jsx';
 import { PodActions } from './PodActions.jsx';
-import { RelativeTime, makeKey } from './util.js';
+import { RelativeTime, makeKey, image_name, PodmanInfoContext } from './util.js';
 import './Pods.scss';
 
 const _ = cockpit.gettext;
@@ -60,6 +62,21 @@ interface Stats {
     MemUsage?: number;
 }
 
+interface Image {
+    key: string;
+    uid: number | null;
+    RepoTags?: string[] | null;
+    [extra: string]: unknown;
+}
+
+interface QuadletContainer {
+    key: string;
+    uid: number | null;
+    Id: string;
+    Name: string;
+    Pod?: string;
+}
+
 interface User {
     con: unknown;
     uid: number | null;
@@ -68,6 +85,10 @@ interface User {
 
 export interface PodsProps {
     pods: Record<string, Pod> | null;
+    /* inactive Quadlet pods, mocked by app.jsx from the systemd generator output */
+    quadletPods: Record<string, Pod> | null;
+    quadletContainers: Record<string, QuadletContainer> | null;
+    images: Record<string, Image> | null;
     containers: Record<string, Container> | null;
     containersStats: Record<string, Stats>;
     users: User[];
@@ -121,10 +142,39 @@ function containerLabelColor(status: string, unhealthy: boolean): "green" | "red
 const statusOrder: Record<string, number> = { Running: 0, Degraded: 1, Paused: 2, Error: 3 };
 
 export const Pods = ({
-    pods, containers, containersStats, users, ownerFilter, textFilter, filter,
+    pods, quadletPods, quadletContainers, images, containers, containersStats, users, ownerFilter, textFilter, filter,
     onAddNotification, onFilterChanged, onContainerFilterChanged,
 }: PodsProps) => {
     const [memTotal, setMemTotal] = useState<number>(0);
+    const Dialogs = useDialogs();
+
+    const createContainer = (pod: Pod) => {
+        // same shape Containers.jsx hands to ImageRunModal
+        const localImages = Object.values(images ?? {}).map(img => {
+            const tags = img.RepoTags ?? [];
+            img.Index = tags[0] ? tags[0].split('/')[0] : "";
+            img.Name = image_name(img as { RepoTags?: string[] });
+            img.toString = function () { return this.Name as string };
+            return img;
+        })
+                .filter(img => img.Index !== "");
+        Dialogs.show(
+            <PodmanInfoContext.Consumer>
+                {podmanInfo => (
+                    <DialogsContext.Consumer>
+                        {dialogs => (
+                            <ImageRunModal users={users}
+                                           localImages={localImages}
+                                           pod={pod}
+                                           onAddNotification={onAddNotification}
+                                           podmanInfo={podmanInfo}
+                                           dialogs={dialogs} />
+                        )}
+                    </DialogsContext.Consumer>
+                )}
+            </PodmanInfoContext.Consumer>
+        );
+    };
 
     useEffect(() => {
         machine_info.cpu_ram_info()
@@ -143,7 +193,13 @@ export const Pods = ({
     const lcf = textFilter.toLowerCase();
     const onlyRunning = filter === "running";
 
-    const visiblePods = Object.values(pods ?? {})
+    // Quadlet pods that currently have no podman pod object show up as inactive pods
+    const serviceKeys = new Set(Object.values(pods ?? {})
+            .map(pod => pod.Labels?.PODMAN_SYSTEMD_UNIT ? makeKey(pod.uid, pod.Labels.PODMAN_SYSTEMD_UNIT) : null)
+            .filter(Boolean));
+    const inactiveQuadletPods = Object.values(quadletPods ?? {}).filter(pod => !serviceKeys.has(pod.key));
+
+    const visiblePods = [...Object.values(pods ?? {}), ...inactiveQuadletPods]
             .filter(pod => matchesOwner(pod.uid, ownerFilter))
             .filter(pod => !lcf ||
                 pod.Name.toLowerCase().includes(lcf) ||
@@ -156,8 +212,14 @@ export const Pods = ({
 
     const renderPod = (pod: Pod) => {
         const user = users.find(u => u.uid === pod.uid);
-        const members = (pod.Containers ?? []).filter(c => c.Id !== pod.InfraId);
         const isPodService = !!pod.Labels?.PODMAN_SYSTEMD_UNIT && !pod.Labels.PODMAN_SYSTEMD_UNIT.startsWith("podman-compose@");
+        let members: PodContainerRef[] = (pod.Containers ?? []).filter(c => c.Id !== pod.InfraId);
+        if (members.length === 0 && isPodService) {
+            // inactive quadlet pod: its containers are quadlets referencing the pod unit
+            members = Object.values(quadletContainers ?? {})
+                    .filter(c => c.Pod && makeKey(c.uid, c.Pod) === pod.key)
+                    .map(c => ({ Id: c.Id, Names: c.Name, Status: "exited" }));
+        }
 
         let running = 0;
         let unhealthy = 0;
@@ -214,7 +276,8 @@ export const Pods = ({
             <Card isCompact key={pod.key} className="podman-pod-card" id={`podman-pod-${pod.Id.slice(0, 12)}`}>
                 <CardHeader actions={{
                     actions: user?.con
-                        ? <PodActions con={user.con} pod={pod} onAddNotification={onAddNotification} isPodService={isPodService} />
+                        ? <PodActions con={user.con} pod={pod} onAddNotification={onAddNotification} isPodService={isPodService}
+                                      onCreateContainer={images ? () => createContainer(pod) : null} />
                         : null,
                     hasNoOffset: true,
                 }}>

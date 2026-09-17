@@ -919,6 +919,9 @@ class Application extends React.Component {
             <Pods
                 key="podList"
                 pods={loadingPods ? null : (this.state.pods ?? null)}
+                quadletPods={loadingQuadlets ? null : this.state.quadletPods}
+                quadletContainers={loadingQuadlets ? null : this.state.quadletContainers}
+                images={loadingImages ? null : this.state.images}
                 containers={loadingContainers ? null : this.state.containers}
                 containersStats={this.state.containersStats}
                 users={this.state.users}
