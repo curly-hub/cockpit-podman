@@ -336,9 +336,9 @@ export const Overview = ({
                                       {imagesOutdated > 0 &&
                                           <>
                                               {" · "}
-                                              <span className="podman-overview-uncapped">
+                                              <Label isCompact status="warning" icon={<ExclamationTriangleIcon />}>
                                                   {cockpit.format(cockpit.ngettext("$0 update available", "$0 updates available", imagesOutdated), imagesOutdated)}
-                                              </span>
+                                              </Label>
                                           </>}
                                   </>
                               )} />
@@ -365,9 +365,9 @@ export const Overview = ({
                                           <>
                                               {memTotal && counts.running ? " · " : ""}
                                               <Tooltip content={_("Running containers without a memory limit can consume all host memory.")}>
-                                                  <span className="podman-overview-uncapped">
+                                                  <Label isCompact status="warning" icon={<ExclamationTriangleIcon />}>
                                                       {cockpit.format(cockpit.ngettext("$0 without memory limit", "$0 without memory limit", memUncapped), memUncapped)}
-                                                  </span>
+                                                  </Label>
                                               </Tooltip>
                                           </>
                                       )}

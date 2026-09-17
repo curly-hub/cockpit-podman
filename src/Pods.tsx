@@ -338,8 +338,12 @@ export const Pods = ({
                                       {...(memVariant ? { variant: memVariant } : {})}
                                       aria-label={cockpit.format(_("Memory usage of pod $0"), pod.Name)} />
                             {uncapped > 0 &&
-                                <div className="podman-pod-uncapped">
-                                    {cockpit.format(cockpit.ngettext("$0 container without memory limit", "$0 containers without memory limit", uncapped), uncapped)}
+                                <div>
+                                    <Tooltip content={_("Running containers without a memory limit can consume all host memory.")}>
+                                        <Label status="warning" icon={<ExclamationTriangleIcon />}>
+                                            {cockpit.format(cockpit.ngettext("$0 container without memory limit", "$0 containers without memory limit", uncapped), uncapped)}
+                                        </Label>
+                                    </Tooltip>
                                 </div>}
                         </>
                     )}

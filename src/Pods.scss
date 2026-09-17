@@ -22,14 +22,9 @@
     gap: var(--pf-t--global--spacer--sm);
 }
 
-.podman-pod-facts,
-.podman-pod-uncapped {
+.podman-pod-facts {
     color: var(--pf-t--global--text--color--subtle);
     font-size: var(--pf-t--global--font--size--md);
-}
-
-.podman-pod-uncapped {
-    color: var(--pf-t--global--text--color--status--warning--default);
 }
 
 .podman-pod-containers .pf-v6-c-label {

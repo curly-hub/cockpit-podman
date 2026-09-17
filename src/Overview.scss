@@ -47,11 +47,10 @@
 
 .podman-overview-tile-warning {
     border-color: var(--pf-t--global--border--color--status--warning--default);
+}
 
-    .podman-overview-uncapped {
-        color: var(--pf-t--global--text--color--status--warning--default);
-        text-decoration: underline dotted;
-    }
+.podman-overview-tile-detail .pf-v6-c-label {
+    vertical-align: middle;
 }
 
 .podman-overview-tile-danger {
