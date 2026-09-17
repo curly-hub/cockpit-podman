@@ -73,8 +73,11 @@ export interface PodsProps {
     users: User[];
     ownerFilter: string | number;
     textFilter: string;
+    /* "running" or "all", the same value the Containers table uses */
+    filter: string;
     onAddNotification: (n: unknown) => void;
     onFilterChanged: (text: string) => void;
+    onContainerFilterChanged: (value: string) => void;
 }
 
 const RESTART_LOOP_THRESHOLD = 3;
@@ -118,7 +121,8 @@ function containerLabelColor(status: string, unhealthy: boolean): "green" | "red
 const statusOrder: Record<string, number> = { Running: 0, Degraded: 1, Paused: 2, Error: 3 };
 
 export const Pods = ({
-    pods, containers, containersStats, users, ownerFilter, textFilter, onAddNotification, onFilterChanged,
+    pods, containers, containersStats, users, ownerFilter, textFilter, filter,
+    onAddNotification, onFilterChanged, onContainerFilterChanged,
 }: PodsProps) => {
     const [memTotal, setMemTotal] = useState<number>(0);
 
@@ -128,20 +132,27 @@ export const Pods = ({
                 .catch((ex: Error) => console.warn("Pods: cannot read host memory:", ex.toString()));
     }, []);
 
-    const focusTable = (text: string) => {
+    const focusTable = (text: string, showAll = false) => {
         onFilterChanged(text);
+        if (showAll)
+            onContainerFilterChanged("all");
         document.getElementById("containers-containers")?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
 
     const loading = pods === null || containers === null;
     const lcf = textFilter.toLowerCase();
+    const onlyRunning = filter === "running";
 
-    const podList = Object.values(pods ?? {})
+    const visiblePods = Object.values(pods ?? {})
             .filter(pod => matchesOwner(pod.uid, ownerFilter))
             .filter(pod => !lcf ||
                 pod.Name.toLowerCase().includes(lcf) ||
-                (pod.Containers ?? []).some(c => (c.Names || "").toLowerCase().includes(lcf)))
+                (pod.Containers ?? []).some(c => (c.Names || "").toLowerCase().includes(lcf)));
+    // mirror the Containers table: "Only running" hides every pod that is not in Running state
+    const podList = visiblePods
+            .filter(pod => !onlyRunning || pod.Status === "Running")
             .sort((a, b) => (statusOrder[a.Status] ?? 9) - (statusOrder[b.Status] ?? 9) || a.Name.localeCompare(b.Name));
+    const hiddenPods = visiblePods.length - podList.length;
 
     const renderPod = (pod: Pod) => {
         const user = users.find(u => u.uid === pod.uid);
@@ -208,7 +219,7 @@ export const Pods = ({
                     hasNoOffset: true,
                 }}>
                     <CardTitle>
-                        <Button variant="link" isInline className="podman-pod-name" onClick={() => focusTable(pod.Name)}>
+                        <Button variant="link" isInline className="podman-pod-name" onClick={() => focusTable(pod.Name, pod.Status !== "Running")}>
                             {pod.Name}
                         </Button>
                     </CardTitle>
@@ -257,7 +268,7 @@ export const Pods = ({
                             {memberDetails.map(m => (
                                 <Tooltip key={m.ref.Id} content={m.isUnhealthy ? _("Health check is failing") : (m.isLooping ? _("Possible restart loop") : m.status)}>
                                     <Label isCompact variant="outline" color={containerLabelColor(m.status, m.isUnhealthy)}
-                                           onClick={() => focusTable(m.name)}>
+                                           onClick={() => focusTable(m.name, m.status !== "running")}>
                                         {m.name}
                                     </Label>
                                 </Tooltip>
@@ -285,9 +296,18 @@ export const Pods = ({
         );
     } else if (podList.length === 0) {
         body = (
-            <EmptyState variant={EmptyStateVariant.xs} icon={CubesIcon} titleText={textFilter ? _("No matching pods") : _("No pods")} headingLevel="h3">
+            <EmptyState variant={EmptyStateVariant.xs} icon={CubesIcon}
+                        titleText={hiddenPods ? _("No running pods") : (textFilter ? _("No matching pods") : _("No pods"))} headingLevel="h3">
                 <EmptyStateBody>
-                    {textFilter ? _("No pod or pod member matches the current filter.") : _("Pods group containers that share a network namespace. Create one from the Containers card.")}
+                    {hiddenPods
+                        ? (
+                            <>
+                                {cockpit.format(cockpit.ngettext("$0 stopped pod is hidden by the \"Only running\" filter.", "$0 stopped pods are hidden by the \"Only running\" filter.", hiddenPods), hiddenPods)}
+                                {" "}
+                                <Button variant="link" isInline onClick={() => onContainerFilterChanged("all")}>{_("Show all")}</Button>
+                            </>
+                        )
+                        : (textFilter ? _("No pod or pod member matches the current filter.") : _("Pods group containers that share a network namespace. Create one from the Containers card."))}
                 </EmptyStateBody>
             </EmptyState>
         );
@@ -311,6 +331,13 @@ export const Pods = ({
                     {!loading && podList.length > 0 &&
                         <Content component={ContentVariants.p} className="ignore-pixels">
                             {cockpit.format(cockpit.ngettext("$0 pod, $1 running", "$0 pods, $1 running", podList.length), podList.length, runningPods)}
+                            {hiddenPods > 0 &&
+                                <>
+                                    {" · "}
+                                    {cockpit.format(cockpit.ngettext("$0 stopped pod hidden", "$0 stopped pods hidden", hiddenPods), hiddenPods)}
+                                    {" "}
+                                    <Button variant="link" isInline onClick={() => onContainerFilterChanged("all")}>{_("Show all")}</Button>
+                                </>}
                         </Content>}
                 </Flex>
             </CardHeader>

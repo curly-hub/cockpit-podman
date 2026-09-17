@@ -924,8 +924,10 @@ class Application extends React.Component {
                 users={this.state.users}
                 ownerFilter={this.state.ownerFilter}
                 textFilter={this.state.textFilter}
+                filter={this.state.containersFilter}
                 onAddNotification={this.onAddNotification}
                 onFilterChanged={this.onFilterChanged}
+                onContainerFilterChanged={this.onContainerFilterChanged}
             />
         );
         const imageList = (
