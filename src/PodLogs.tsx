@@ -5,7 +5,7 @@
  * coloured service or container name, like `podman-compose logs`. The recent history of all
  * members is merged by timestamp first; after that each stream is followed live from the last
  * line it delivered, so nothing is lost or shown twice at the hand-over. */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import { Alert } from "@patternfly/react-core/dist/esm/components/Alert";
 import { Button } from "@patternfly/react-core/dist/esm/components/Button";
@@ -94,11 +94,12 @@ const logsQuery = (query: Record<string, string>) => ({ stdout: "true", stderr: 
 
 export const PodLogsModal = ({ uid, podName, sources }: { uid: Uid; podName: string; sources: PodLogSource[] }) => {
     const Dialogs = useDialogs();
-    const termRef = useRef<HTMLDivElement>(null);
+    // the modal renders its content through a portal, so the div only exists after the first
+    // render; a state-backed ref re-runs the effect once it is there
+    const [element, setElement] = useState<HTMLDivElement | null>(null);
     const [errors, setErrors] = useState<string[]>([]);
 
     useEffect(() => {
-        const element = termRef.current;
         if (!element)
             return;
 
@@ -220,7 +221,7 @@ export const PodLogsModal = ({ uid, podName, sources }: { uid: Uid; podName: str
             connections.forEach(con => con.close());
             view.dispose();
         };
-    }, [uid, sources]);
+    }, [element, uid, sources]);
 
     return (
         <Modal isOpen position="top" variant="large" className="podman-pod-logs-modal" onClose={Dialogs.close}>
@@ -233,7 +234,7 @@ export const PodLogsModal = ({ uid, podName, sources }: { uid: Uid; podName: str
                     <Alert variant="warning" isInline title={_("Some logs could not be read")}>
                         {errors.map(err => <div key={err}>{err}</div>)}
                     </Alert>}
-                <div className="podman-pod-logs" ref={termRef} />
+                <div className="podman-pod-logs" ref={setElement} />
             </ModalBody>
             <ModalFooter>
                 <Button variant="secondary" onClick={Dialogs.close}>{_("Close")}</Button>
