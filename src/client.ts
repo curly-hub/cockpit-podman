@@ -186,3 +186,13 @@ export const pruneVolumes = (con: Connection) => podmanJson4(con, "libpod/volume
 
 // sizes of images, containers (writable layer) and volumes
 export const getSystemDf = (con: Connection) => podmanJson4(con, "libpod/system/df", "GET", {});
+
+// secrets: the list carries only metadata, the value never leaves podman
+export const getSecrets = (con: Connection) => podmanJson4(con, "libpod/secrets/json", "GET", {});
+
+// the body is the raw value; with a form content type podman would parse it as form fields and see no data
+export const createSecret = (con: Connection, name: string, value: string, driver: string = "file") =>
+    con.call({ method: "POST", path: VERSION4 + "libpod/secrets/create", body: value, params: { name, driver }, headers: { "Content-Type": "text/plain" } })
+            .then(reply => JSON.parse(reply));
+
+export const delSecret = (con: Connection, name: string) => podmanCall4(con, `libpod/secrets/${name}`, "DELETE", {});

@@ -23,6 +23,7 @@ import { Networks } from './Networks.tsx';
 import { Overview } from './Overview.tsx';
 import { PodmanDiagnostics } from './PodmanDiagnostics.tsx';
 import { Pods } from './Pods.tsx';
+import { Secrets } from './Secrets.tsx';
 import { Volumes } from './Volumes.tsx';
 import * as client from './client.js';
 import detect_quadlets from './detect-quadlets.py';
@@ -66,6 +67,8 @@ class Application extends React.Component {
             volumes: null,
             // uid string → libpod/system/df reply, for the storage overview
             systemDf: {},
+            // key → secret (libpod/secrets/json entry plus uid/key); values never leave podman
+            secrets: null,
             // Mapping of quadlet containers and pods on the system to show
             // inactive containers and pods as quadlets are ephemeral and the
             // container/pod is not kept around when they are stopped.
@@ -229,6 +232,27 @@ class Application extends React.Component {
                     });
                 })
                 .catch(ex => console.warn("Failed to do updateNetworks for uid", con.uid, ":", JSON.stringify(ex)));
+    }
+
+    updateSecrets(con) {
+        return client.getSecrets(con)
+                .then(reply => {
+                    this.setState(prevState => {
+                        const secrets = {};
+                        Object.entries(prevState.secrets || {}).forEach(([key, s]) => {
+                            if (s.uid !== con.uid)
+                                secrets[key] = s;
+                        });
+                        for (const s of reply || []) {
+                            s.uid = con.uid;
+                            s.key = makeKey(con.uid, s.ID);
+                            secrets[s.key] = s;
+                        }
+                        const users = prevState.users.map(u => u.uid === con.uid ? { ...u, secretsLoaded: true } : u);
+                        return { secrets, users };
+                    });
+                })
+                .catch(ex => console.warn("Failed to do updateSecrets for uid", con.uid, ":", JSON.stringify(ex)));
     }
 
     updateVolumes(con) {
@@ -533,6 +557,10 @@ class Application extends React.Component {
             // create, remove, prune
             this.updateVolumes(con);
             break;
+        case 'secret':
+            // create, remove
+            this.updateSecrets(con);
+            break;
         default:
             console.warn('Unhandled event type ', event.Type);
         }
@@ -540,7 +568,7 @@ class Application extends React.Component {
 
     cleanupAfterService(con) {
         debug("cleanupAfterService", con.uid, "current owner filter:", this.state.ownerFilter);
-        ["images", "containers", "pods", "networks", "volumes"].forEach(t => {
+        ["images", "containers", "pods", "networks", "volumes", "secrets"].forEach(t => {
             if (this.state[t])
                 this.setState(prevState => {
                     const copy = {};
@@ -742,7 +770,7 @@ class Application extends React.Component {
             const reply = await client.getInfo(con);
             this.setState(prevState => {
                 const users = prevState.users.filter(u => u.uid !== uid);
-                users.push({ con, uid, name: username, containersLoaded: false, podsLoaded: false, imagesLoaded: false, quadletsLoaded: false, networksLoaded: false, volumesLoaded: false });
+                users.push({ con, uid, name: username, containersLoaded: false, podsLoaded: false, imagesLoaded: false, quadletsLoaded: false, networksLoaded: false, volumesLoaded: false, secretsLoaded: false });
                 // keep a nice sort order for dialogs
                 users.sort(compareUser);
                 debug("init uid", uid, "username", username, "new users:", users);
@@ -773,6 +801,7 @@ class Application extends React.Component {
         this.updatePods(con);
         this.updateNetworks(con);
         this.updateVolumes(con);
+        this.updateSecrets(con);
 
         client.streamEvents(con, message => this.handleEvent(message, con))
                 .catch(e => console.error("uid", uid, "streamEvents failed:", JSON.stringify(e)))
@@ -1006,6 +1035,7 @@ class Application extends React.Component {
         const loadingQuadlets = this.state.users.find(u => u.con && !u.quadletsLoaded);
         const loadingNetworks = this.state.users.find(u => u.con && !u.networksLoaded);
         const loadingVolumes = this.state.users.find(u => u.con && !u.volumesLoaded);
+        const loadingSecrets = this.state.users.find(u => u.con && !u.secretsLoaded);
 
         const overview = (
             <Overview
@@ -1072,6 +1102,19 @@ class Application extends React.Component {
                 onFilterChanged={this.onFilterChanged}
                 onContainerFilterChanged={this.onContainerFilterChanged}
                 onRefresh={() => this.state.users.forEach(u => u.con && this.updateVolumes(u.con))}
+            />
+        );
+        const secretList = (
+            <Secrets
+                key="secretList"
+                secrets={loadingSecrets ? null : this.state.secrets}
+                containers={loadingContainers ? null : this.state.containers}
+                users={this.state.users}
+                ownerFilter={this.state.ownerFilter}
+                textFilter={this.state.textFilter}
+                onAddNotification={this.onAddNotification}
+                onFilterChanged={this.onFilterChanged}
+                onContainerFilterChanged={this.onContainerFilterChanged}
             />
         );
         const imageList = (
@@ -1164,6 +1207,7 @@ class Application extends React.Component {
                                 {containerList}
                                 {volumeList}
                                 {networkList}
+                                {secretList}
                             </Stack>
                         </PageSection>
                     </Page>
