@@ -26,6 +26,7 @@ import { ComposeDeployModal } from './ComposeDeployModal.tsx';
 import { ImageRunModal } from './ImageRunModal.jsx';
 import { PodActions } from './PodActions.jsx';
 import { PodLogsModal } from './PodLogs.tsx';
+import { PodTemplateModal } from './PodTemplateModal.tsx';
 import { canManageStack, containerStack, isOutdated, recreateStack, stackOfPod, tagToImageId } from './compose.ts';
 import { sumRates } from './stats.ts';
 import type { StatsHistory } from './stats.ts';
@@ -546,10 +547,16 @@ export const Pods = ({
         <Card id="containers-pods" className="containers-pods">
             <CardHeader actions={{
                 actions: (
-                    <Button variant="secondary" id="pods-deploy-stack"
-                            onClick={() => Dialogs.show(<ComposeDeployModal users={users} containers={containers} onAddNotification={onAddNotification} />)}>
-                        {_("Deploy compose stack")}
-                    </Button>
+                    <Flex spaceItems={{ default: "spaceItemsSm" }}>
+                        <Button variant="secondary" id="pods-create-from-template"
+                                onClick={() => Dialogs.show(<PodTemplateModal users={users} pods={pods} onAddNotification={onAddNotification} />)}>
+                            {_("Create from template")}
+                        </Button>
+                        <Button variant="secondary" id="pods-deploy-stack"
+                                onClick={() => Dialogs.show(<ComposeDeployModal users={users} containers={containers} onAddNotification={onAddNotification} />)}>
+                            {_("Deploy compose stack")}
+                        </Button>
+                    </Flex>
                 ),
             }}>
                 <Flex alignItems={{ default: "alignItemsBaseline" }}>

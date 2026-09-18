@@ -1,0 +1,37 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
+.podman-template-modal {
+    .pf-v6-c-data-list__item-content {
+        padding-block: var(--pf-t--global--spacer--sm);
+    }
+}
+
+.podman-template-name {
+    font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+.podman-template-description,
+.podman-template-image {
+    font-size: var(--pf-t--global--font--size--sm);
+}
+
+.podman-template-image {
+    font-family: var(--pf-t--global--font--family--mono);
+    overflow-wrap: anywhere;
+}
+
+.podman-template-port {
+    max-inline-size: 8em;
+}
+
+.podman-template-form .pf-v6-c-form__section-title {
+    margin-block-start: var(--pf-t--global--spacer--sm);
+}
+
+.podman-template-save .pf-v6-c-form {
+    margin-block-start: var(--pf-t--global--spacer--sm);
+}
+
+.podman-template-validation {
+    align-self: center;
+}
