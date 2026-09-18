@@ -142,3 +142,13 @@
     border-color: var(--pf-t--global--border--color--status--danger--default);
     color: var(--pf-t--global--text--color--status--danger--default);
 }
+
+/* Volumes and Networks cards */
+.podman-volume-path {
+    font-family: var(--pf-t--global--font--family--mono);
+    font-size: var(--pf-t--global--font--size--sm);
+}
+
+.podman-network-name {
+    font-weight: var(--pf-t--global--font--weight--body--bold);
+}

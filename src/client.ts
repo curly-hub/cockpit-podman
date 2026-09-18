@@ -15,6 +15,18 @@ const podmanJson = (con: Connection, name: string, method: string, args: JsonObj
     podmanCall(con, name, method, args, body)
             .then(reply => JSON.parse(reply));
 
+// networks and volumes need the 4.0 API; podman rejects them under the 3.4 prefix
+export const VERSION4 = "/v4.0.0/";
+
+const podmanCall4 = (con: Connection, name: string, method: string, args: JsonObject, body?: string):
+                   Promise<string> =>
+    con.call({ method, path: VERSION4 + name, body: body || "", params: args, });
+
+const podmanJson4 = (con: Connection, name: string, method: string, args: JsonObject, body?: string):
+                   Promise<JsonObject|JsonValue> =>
+    podmanCall4(con, name, method, args, body)
+            .then(reply => JSON.parse(reply));
+
 export const streamEvents = (con: Connection, callback: MonitorCallback) =>
     con.monitor(`${VERSION}libpod/events`, callback);
 
@@ -161,3 +173,16 @@ export const imageHistory = (con: Connection, id: string) => podmanJson(con, `li
 export const imageExists = (con: Connection, id: string) => podmanCall(con, `libpod/images/${id}/exists`, "GET", {});
 
 export const containerExists = (con: Connection, id: string) => podmanCall(con, `libpod/containers/${id}/exists`, "GET", {});
+
+export const getNetworks = (con: Connection) => podmanJson4(con, "libpod/networks/json", "GET", {});
+
+export const delNetwork = (con: Connection, name: string) => podmanCall4(con, `libpod/networks/${name}`, "DELETE", {});
+
+export const getVolumes = (con: Connection) => podmanJson4(con, "libpod/volumes/json", "GET", {});
+
+export const delVolume = (con: Connection, name: string, force: boolean) => podmanCall4(con, `libpod/volumes/${name}`, "DELETE", { force });
+
+export const pruneVolumes = (con: Connection) => podmanJson4(con, "libpod/volumes/prune", "POST", {});
+
+// sizes of images, containers (writable layer) and volumes
+export const getSystemDf = (con: Connection) => podmanJson4(con, "libpod/system/df", "GET", {});

@@ -19,9 +19,11 @@ import { superuser } from "superuser";
 import ContainerHeader from './ContainerHeader.tsx';
 import Containers from './Containers.jsx';
 import Images from './Images.jsx';
+import { Networks } from './Networks.tsx';
 import { Overview } from './Overview.tsx';
 import { PodmanDiagnostics } from './PodmanDiagnostics.tsx';
 import { Pods } from './Pods.tsx';
+import { Volumes } from './Volumes.tsx';
 import * as client from './client.js';
 import detect_quadlets from './detect-quadlets.py';
 import { diagnose } from './diagnostics.ts';
@@ -44,6 +46,9 @@ function compareUser(a, b) {
     return a.name.localeCompare(b.name);
 }
 
+// samples of container stats kept per container, at podman's ~5 s interval about ten minutes
+const STATS_HISTORY_LENGTH = 120;
+
 class Application extends React.Component {
     constructor(props) {
         super(props);
@@ -55,6 +60,12 @@ class Application extends React.Component {
             containers: null,
             containersFilter: "all",
             containersStats: {},
+            // key → network (libpod/networks/json entry plus uid/key)
+            networks: null,
+            // key → volume (libpod/volumes/json entry plus uid/key and df: { Size, ReclaimableSize, Links })
+            volumes: null,
+            // uid string → libpod/system/df reply, for the storage overview
+            systemDf: {},
             // Mapping of quadlet containers and pods on the system to show
             // inactive containers and pods as quadlets are ephemeral and the
             // container/pod is not kept around when they are stopped.
@@ -80,6 +91,10 @@ class Application extends React.Component {
             location: {},
         };
         this.onAddNotification = this.onAddNotification.bind(this);
+        this.updateVolumes = this.updateVolumes.bind(this);
+        // container key → recent stats samples [{ t, cpu, mem, rx, tx, bi, bo, pids }], newest last;
+        // kept outside of React state, the stats state update already triggers a render
+        this.statsHistory = {};
         this.onDismissNotification = this.onDismissNotification.bind(this);
         this.onFilterChanged = this.onFilterChanged.bind(this);
         this.onOwnerChanged = this.onOwnerChanged.bind(this);
@@ -165,7 +180,12 @@ class Application extends React.Component {
             if (reply.Error != null) // executed when container stop
                 console.warn("Failed to update container stats:", JSON.stringify(reply.message));
             else {
-                reply.Stats.forEach(stat => this.updateState("containersStats", makeKey(con.uid, stat.ContainerID), stat));
+                const now = Date.now();
+                reply.Stats.forEach(stat => {
+                    const key = makeKey(con.uid, stat.ContainerID);
+                    this.recordStatsSample(key, stat, now);
+                    this.updateState("containersStats", key, stat);
+                });
             }
         }).catch(ex => {
             if (ex.cause == "no support for CGroups V1 in rootless environments" || ex.cause == "Container stats resource only available for cgroup v2") {
@@ -173,6 +193,74 @@ class Application extends React.Component {
             } else
                 console.warn("Failed to update container stats:", JSON.stringify(ex.message));
         });
+    }
+
+    recordStatsSample(key, stat, now) {
+        let rx = 0;
+        let tx = 0;
+        for (const iface of Object.values(stat.Network || {})) {
+            rx += iface.RxBytes || 0;
+            tx += iface.TxBytes || 0;
+        }
+        const history = this.statsHistory[key] || [];
+        history.push({ t: now, cpu: stat.CPU, mem: stat.MemUsage, rx, tx, bi: stat.BlockInput || 0, bo: stat.BlockOutput || 0, pids: stat.PIDs });
+        // stats arrive every ~5 seconds, so this is about ten minutes
+        if (history.length > STATS_HISTORY_LENGTH)
+            history.splice(0, history.length - STATS_HISTORY_LENGTH);
+        this.statsHistory[key] = history;
+    }
+
+    updateNetworks(con) {
+        return client.getNetworks(con)
+                .then(reply => {
+                    this.setState(prevState => {
+                        const networks = {};
+                        Object.entries(prevState.networks || {}).forEach(([key, net]) => {
+                            if (net.uid !== con.uid)
+                                networks[key] = net;
+                        });
+                        for (const net of reply) {
+                            net.uid = con.uid;
+                            net.key = makeKey(con.uid, net.id);
+                            networks[net.key] = net;
+                        }
+                        const users = prevState.users.map(u => u.uid === con.uid ? { ...u, networksLoaded: true } : u);
+                        return { networks, users };
+                    });
+                })
+                .catch(ex => console.warn("Failed to do updateNetworks for uid", con.uid, ":", JSON.stringify(ex)));
+    }
+
+    updateVolumes(con) {
+        // sizes come from system/df, which walks the storage and can be slow; a failure there only loses the sizes
+        return Promise.all([client.getVolumes(con), client.getSystemDf(con).catch(ex => {
+            console.warn("Failed to read system df for uid", con.uid, ":", JSON.stringify(ex));
+            return null;
+        })])
+                .then(([reply, df]) => {
+                    this.setState(prevState => {
+                        const volumes = {};
+                        Object.entries(prevState.volumes || {}).forEach(([key, vol]) => {
+                            if (vol.uid !== con.uid)
+                                volumes[key] = vol;
+                        });
+                        const sizes = {};
+                        for (const entry of df?.Volumes || [])
+                            sizes[entry.VolumeName] = entry;
+                        for (const vol of reply) {
+                            vol.uid = con.uid;
+                            vol.key = makeKey(con.uid, vol.Name);
+                            vol.df = sizes[vol.Name] ?? prevState.volumes?.[vol.key]?.df ?? null;
+                            volumes[vol.key] = vol;
+                        }
+                        const systemDf = { ...prevState.systemDf };
+                        if (df)
+                            systemDf[String(con.uid)] = df;
+                        const users = prevState.users.map(u => u.uid === con.uid ? { ...u, volumesLoaded: true } : u);
+                        return { volumes, systemDf, users };
+                    });
+                })
+                .catch(ex => console.warn("Failed to do updateVolumes for uid", con.uid, ":", JSON.stringify(ex)));
     }
 
     initContainers(con) {
@@ -372,6 +460,8 @@ class Application extends React.Component {
             break;
 
         case 'remove':
+            delete this.statsHistory[makeKey(con.uid, id)];
+            this.updateVolumes(con);
             this.setState(prevState => {
                 const containers = { ...prevState.containers };
                 delete containers[makeKey(con.uid, id)];
@@ -435,6 +525,14 @@ class Application extends React.Component {
         case 'pod':
             this.handlePodEvent(event, con);
             break;
+        case 'network':
+            // create, remove, connect, disconnect, update: the list is small, reload it
+            this.updateNetworks(con);
+            break;
+        case 'volume':
+            // create, remove, prune
+            this.updateVolumes(con);
+            break;
         default:
             console.warn('Unhandled event type ', event.Type);
         }
@@ -442,7 +540,7 @@ class Application extends React.Component {
 
     cleanupAfterService(con) {
         debug("cleanupAfterService", con.uid, "current owner filter:", this.state.ownerFilter);
-        ["images", "containers", "pods"].forEach(t => {
+        ["images", "containers", "pods", "networks", "volumes"].forEach(t => {
             if (this.state[t])
                 this.setState(prevState => {
                     const copy = {};
@@ -644,7 +742,7 @@ class Application extends React.Component {
             const reply = await client.getInfo(con);
             this.setState(prevState => {
                 const users = prevState.users.filter(u => u.uid !== uid);
-                users.push({ con, uid, name: username, containersLoaded: false, podsLoaded: false, imagesLoaded: false, quadletsLoaded: false });
+                users.push({ con, uid, name: username, containersLoaded: false, podsLoaded: false, imagesLoaded: false, quadletsLoaded: false, networksLoaded: false, volumesLoaded: false });
                 // keep a nice sort order for dialogs
                 users.sort(compareUser);
                 debug("init uid", uid, "username", username, "new users:", users);
@@ -673,6 +771,8 @@ class Application extends React.Component {
         this.initQuadlets(con);
         this.subscribeDaemonReload(con);
         this.updatePods(con);
+        this.updateNetworks(con);
+        this.updateVolumes(con);
 
         client.streamEvents(con, message => this.handleEvent(message, con))
                 .catch(e => console.error("uid", uid, "streamEvents failed:", JSON.stringify(e)))
@@ -904,6 +1004,8 @@ class Application extends React.Component {
         const loadingContainers = this.state.users.find(u => u.con && !u.containersLoaded);
         const loadingPods = this.state.users.find(u => u.con && !u.podsLoaded);
         const loadingQuadlets = this.state.users.find(u => u.con && !u.quadletsLoaded);
+        const loadingNetworks = this.state.users.find(u => u.con && !u.networksLoaded);
+        const loadingVolumes = this.state.users.find(u => u.con && !u.volumesLoaded);
 
         const overview = (
             <Overview
@@ -914,6 +1016,9 @@ class Application extends React.Component {
                 selinuxAvailable={this.state.selinuxAvailable}
                 containers={loadingContainers ? null : this.state.containers}
                 containersStats={this.state.containersStats}
+                statsHistory={this.statsHistory}
+                systemDf={this.state.systemDf}
+                volumes={loadingVolumes ? null : this.state.volumes}
                 pods={loadingPods ? null : (this.state.pods ?? null)}
                 images={loadingImages ? null : this.state.images}
                 ownerFilter={this.state.ownerFilter}
@@ -931,6 +1036,7 @@ class Application extends React.Component {
                 images={loadingImages ? null : this.state.images}
                 containers={loadingContainers ? null : this.state.containers}
                 containersStats={this.state.containersStats}
+                statsHistory={this.statsHistory}
                 users={this.state.users}
                 ownerFilter={this.state.ownerFilter}
                 textFilter={this.state.textFilter}
@@ -939,6 +1045,33 @@ class Application extends React.Component {
                 onAddNotification={this.onAddNotification}
                 onFilterChanged={this.onFilterChanged}
                 onContainerFilterChanged={this.onContainerFilterChanged}
+            />
+        );
+        const networkList = (
+            <Networks
+                key="networkList"
+                networks={loadingNetworks ? null : this.state.networks}
+                containers={loadingContainers ? null : this.state.containers}
+                users={this.state.users}
+                ownerFilter={this.state.ownerFilter}
+                textFilter={this.state.textFilter}
+                onAddNotification={this.onAddNotification}
+                onFilterChanged={this.onFilterChanged}
+                onContainerFilterChanged={this.onContainerFilterChanged}
+            />
+        );
+        const volumeList = (
+            <Volumes
+                key="volumeList"
+                volumes={loadingVolumes ? null : this.state.volumes}
+                containers={loadingContainers ? null : this.state.containers}
+                users={this.state.users}
+                ownerFilter={this.state.ownerFilter}
+                textFilter={this.state.textFilter}
+                onAddNotification={this.onAddNotification}
+                onFilterChanged={this.onFilterChanged}
+                onContainerFilterChanged={this.onContainerFilterChanged}
+                onRefresh={() => this.state.users.forEach(u => u.con && this.updateVolumes(u.con))}
             />
         );
         const imageList = (
@@ -964,6 +1097,7 @@ class Application extends React.Component {
                 containers={loadingContainers ? null : this.state.containers}
                 pods={loadingPods ? null : this.state.pods}
                 containersStats={this.state.containersStats}
+                statsHistory={this.statsHistory}
                 filter={this.state.containersFilter}
                 handleFilterChange={this.onContainerFilterChanged}
                 textFilter={this.state.textFilter}
@@ -1028,6 +1162,8 @@ class Application extends React.Component {
                                 {podList}
                                 {imageList}
                                 {containerList}
+                                {volumeList}
+                                {networkList}
                             </Stack>
                         </PageSection>
                     </Page>

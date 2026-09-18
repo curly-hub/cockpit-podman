@@ -198,3 +198,12 @@ export const systemctl_spawn = (args: string[], system: boolean = false) => {
 
     return cockpit.spawn([...systemctl_args, ...args], { superuser: system ? "require" : null, err: "message" });
 };
+
+/* Whether an object owned by `uid` is shown under the page's owner filter ("all", "user" or a uid). */
+export function matchesOwner(uid: number | null, ownerFilter: string | number): boolean {
+    if (ownerFilter === "all")
+        return true;
+    if (ownerFilter === "user")
+        return uid === null;
+    return String(uid) === String(ownerFilter);
+}
