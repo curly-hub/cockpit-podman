@@ -30,6 +30,7 @@ import detect_quadlets from './detect-quadlets.py';
 import { diagnose } from './diagnostics.ts';
 import * as imageUpdates from './image-updates.ts';
 import rest from './rest.js';
+import * as securityScan from './security-scan.ts';
 import { makeKey, WithPodmanInfo, debug } from './util.js';
 
 const _ = cockpit.gettext;
@@ -86,6 +87,10 @@ class Application extends React.Component {
             // image key → { status, tag, checked, ... }, see image-updates.ts
             imageUpdates: imageUpdates.loadResults(),
             imageUpdatesChecking: false,
+            // image key → ScanResult, see security-scan.ts
+            imageScans: securityScan.loadResults(),
+            // image keys with a vulnerability scan in progress
+            imageScanning: [],
             // "user" | "<uid>" → Diagnosis (see diagnostics.ts) for services that failed to initialize
             diagnostics: {},
             diagnosing: false,
@@ -105,6 +110,7 @@ class Application extends React.Component {
         this.updateContainer = this.updateContainer.bind(this);
         this.onNavigate = this.onNavigate.bind(this);
         this.checkImageUpdates = this.checkImageUpdates.bind(this);
+        this.scanImages = this.scanImages.bind(this);
 
         this.pendingUpdateContainer = {}; // key (uid-id) → promise
     }
@@ -996,6 +1002,30 @@ class Application extends React.Component {
         }).finally(() => this.setState({ imageUpdatesChecking: false }));
     }
 
+    // vulnerability scans run one after the other; each result lands as soon as it is known
+    scanImages(images) {
+        const pending = images.filter(image => !this.state.imageScanning.includes(image.key));
+        if (pending.length === 0)
+            return;
+        this.setState(prevState => ({ imageScanning: [...prevState.imageScanning, ...pending.map(i => i.key)] }));
+        let missingReported = false;
+        securityScan.scanImages(pending, (key, result) => {
+            this.setState(prevState => {
+                const scans = { ...prevState.imageScans, [key]: result };
+                securityScan.storeResults(scans);
+                return { imageScans: scans, imageScanning: prevState.imageScanning.filter(k => k !== key) };
+            });
+            if (result.status === "error" && result.message === "not-found" && !missingReported) {
+                missingReported = true;
+                this.onAddNotification({
+                    type: "warning",
+                    error: _("Trivy is not installed"),
+                    errorDetail: _("Vulnerability scans use Trivy. Install the trivy package on this host and scan again."),
+                });
+            }
+        });
+    }
+
     render() {
         // all podman services failed: explain why instead of a generic error
         if (this.state.users.length === 0) {
@@ -1130,6 +1160,9 @@ class Application extends React.Component {
                 imageUpdates={this.state.imageUpdates}
                 imageUpdatesChecking={this.state.imageUpdatesChecking}
                 onCheckImageUpdates={this.checkImageUpdates}
+                imageScans={this.state.imageScans}
+                imageScanning={this.state.imageScanning}
+                onScanImages={this.scanImages}
             />
         );
         const containerList = (

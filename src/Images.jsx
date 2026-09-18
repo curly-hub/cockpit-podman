@@ -24,6 +24,7 @@ import ImageDetails from './ImageDetails.jsx';
 import ImageHistory from './ImageHistory.jsx';
 import { ImageRunModal } from './ImageRunModal.jsx';
 import { ImageSearchModal } from './ImageSearchModal.jsx';
+import { ImageVulnerabilities, VulnerabilityLabel } from './ImageVulnerabilities.tsx';
 import PruneUnusedImagesModal from './PruneUnusedImagesModal.jsx';
 import * as client from './client.js';
 import * as utils from './util.js';
@@ -83,6 +84,10 @@ class Images extends React.Component {
     };
 
     _con_for = image => this.props.users.find(u => u.uid === image.uid).con;
+
+    // only images with a real tag; intermediate layers are not worth a scan of their own
+    onScanAllImages = () => this.props.onScanImages(Object.values(this.props.images || {})
+            .filter(image => (image.RepoTags || []).some(tag => !tag.includes("<none>"))));
 
     onPullAllImages = () => Object.values(this.props.images).forEach(image => {
         // ignore nameless (intermediate) images and the localhost/ pseudo-registry (which cannot be pulled)
@@ -177,8 +182,12 @@ class Images extends React.Component {
             );
         }
 
+        const scan = this.props.imageScans?.[image.key];
+        const scanning = (this.props.imageScanning || []).includes(image.key);
+        const scanLabel = <VulnerabilityLabel result={scan} scanning={scanning} />;
+
         const columns = [
-            { title: <>{utils.image_name(image)} {updateLabel}</>, sortKey: utils.image_name(image), header: true, props: { modifier: "breakWord" } },
+            { title: <>{utils.image_name(image)} {updateLabel} {scanLabel}</>, sortKey: utils.image_name(image), header: true, props: { modifier: "breakWord" } },
             { title: (image.uid == 0) ? _("system") : <div><span className="ct-grey-text">{_("user:")} </span>{user.name}</div>, props: { className: "ignore-pixels", modifier: "nowrap" }, sortKey: user.name },
             { title: <utils.RelativeTime time={image.Created * 1000} />, props: { className: "image-created" }, sortKey: image.Created },
             { title: utils.truncate_id(image.Id), props: { className: "image-id" } },
@@ -189,7 +198,9 @@ class Images extends React.Component {
                                      image={image}
                                      onAddNotification={this.props.onAddNotification}
                                      users={this.props.users}
-                                     downloadImage={this.downloadImage} />,
+                                     downloadImage={this.downloadImage}
+                                     scanning={scanning}
+                                     onScan={() => this.props.onScanImages([image])} />,
                 props: { className: 'pf-v6-c-table__action content-action' }
             },
         ];
@@ -207,6 +218,11 @@ class Images extends React.Component {
             name: _("History"),
             renderer: ImageHistory,
             data: { con: user.con, image }
+        });
+        tabs.push({
+            name: _("Vulnerabilities"),
+            renderer: ImageVulnerabilities,
+            data: { result: scan, scanning, onScan: () => this.props.onScanImages([image]) }
         });
         return {
             expandedContent: <ListingPanel
@@ -337,6 +353,11 @@ class Images extends React.Component {
                 .filter(Boolean);
         const updatesAvailable = updateResults.filter(u => u.status === "update").length;
         const lastChecked = updateResults.reduce((max, u) => Math.max(max, u.checked || 0), 0);
+        const scanResults = Object.values(this.props.images || {})
+                .map(image => this.props.imageScans?.[image.key])
+                .filter(r => r && r.status === "done");
+        const severeImages = scanResults.filter(r => r.counts.CRITICAL + r.counts.HIGH > 0).length;
+        const scanningCount = (this.props.imageScanning || []).length;
         const imageTitleStats = (
             <>
                 <Content component={ContentVariants.div}>
@@ -345,6 +366,15 @@ class Images extends React.Component {
                 {imageStats.unusedTotal !== 0 &&
                 <Content component={ContentVariants.div}>
                     {cockpit.format(cockpit.ngettext("$0 unused image, $1", "$0 unused images, $1", imageStats.unusedTotal), imageStats.unusedTotal, cockpit.format_bytes(imageStats.unusedSize))}
+                </Content>
+                }
+                {(scanResults.length > 0 || scanningCount > 0) &&
+                <Content component={ContentVariants.div} className={severeImages ? "image-updates-summary image-updates-available" : "image-updates-summary"}>
+                    {scanningCount > 0
+                        ? cockpit.format(cockpit.ngettext("Scanning $0 image", "Scanning $0 images", scanningCount), scanningCount)
+                        : (severeImages
+                            ? cockpit.format(cockpit.ngettext("$0 image with critical or high vulnerabilities", "$0 images with critical or high vulnerabilities", severeImages), severeImages)
+                            : cockpit.format(cockpit.ngettext("$0 image scanned, no critical or high vulnerabilities", "$0 images scanned, no critical or high vulnerabilities", scanResults.length), scanResults.length))}
                 </Content>
                 }
                 {lastChecked > 0 &&
@@ -381,6 +411,8 @@ class Images extends React.Component {
                                 </Button>
                                 <ImageOverActions handleDownloadNewImage={this.onOpenNewImagesDialog}
                                                   handleBuildImage={this.onOpenBuildDialog}
+                                                  handleScanAll={this.onScanAllImages}
+                                                  scanning={scanningCount > 0}
                                                   handlePullAllImages={this.onPullAllImages}
                                                   handlePruneUsedImages={this.onOpenPruneUnusedImagesDialog}
                                                   unusedImages={unusedImages} />
@@ -420,7 +452,7 @@ class Images extends React.Component {
     }
 }
 
-const ImageOverActions = ({ handleDownloadNewImage, handleBuildImage, handlePullAllImages, handlePruneUsedImages, unusedImages }) => {
+const ImageOverActions = ({ handleDownloadNewImage, handleBuildImage, handleScanAll, scanning, handlePullAllImages, handlePruneUsedImages, unusedImages }) => {
     const actions = [
         <DropdownItem
             key="download-new-image"
@@ -445,6 +477,15 @@ const ImageOverActions = ({ handleDownloadNewImage, handleBuildImage, handlePull
             {_("Pull all images")}
         </DropdownItem>,
         <DropdownItem
+            key="scan-all-images"
+            id="scan-all-images-button"
+            component="button"
+            isDisabled={scanning}
+            onClick={() => handleScanAll()}
+        >
+            {_("Scan all images for vulnerabilities")}
+        </DropdownItem>,
+        <DropdownItem
             key="prune-unused-images"
             id="prune-unused-images-button"
             component="button"
@@ -466,7 +507,7 @@ const ImageOverActions = ({ handleDownloadNewImage, handleBuildImage, handlePull
     );
 };
 
-const ImageActions = ({ con, image, onAddNotification, users, downloadImage }) => {
+const ImageActions = ({ con, image, onAddNotification, users, downloadImage, scanning, onScan }) => {
     const Dialogs = useDialogs();
 
     const runImage = () => {
@@ -522,6 +563,12 @@ const ImageActions = ({ con, image, onAddNotification, users, downloadImage }) =
             component="button"
             onClick={pullImage}>
             {_("Pull")}
+        </DropdownItem>,
+        <DropdownItem key={`${image.Id}scan`}
+            component="button"
+            isDisabled={scanning}
+            onClick={onScan}>
+            {_("Scan for vulnerabilities")}
         </DropdownItem>,
         <DropdownItem key={`${image.Id}delete`}
                     component="button"

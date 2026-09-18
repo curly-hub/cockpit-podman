@@ -25,3 +25,17 @@
     margin-inline-start: var(--pf-t--global--spacer--sm);
     vertical-align: middle;
 }
+
+.image-scan-label {
+    margin-inline-start: var(--pf-t--global--spacer--xs);
+}
+
+.image-scan-error {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: var(--pf-t--global--font--size--sm);
+}
+
+.image-scan-title {
+    color: var(--pf-t--global--text--color--subtle);
+}
