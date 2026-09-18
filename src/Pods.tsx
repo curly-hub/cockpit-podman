@@ -27,6 +27,8 @@ import { ImageRunModal } from './ImageRunModal.jsx';
 import { PodActions } from './PodActions.jsx';
 import { PodLogsModal } from './PodLogs.tsx';
 import { canManageStack, containerStack, isOutdated, recreateStack, stackOfPod, tagToImageId } from './compose.ts';
+import { sumRates } from './stats.ts';
+import type { StatsHistory } from './stats.ts';
 import { RelativeTime, makeKey, image_name, PodmanInfoContext } from './util.js';
 import './Pods.scss';
 
@@ -106,6 +108,7 @@ export interface PodsProps {
     images: Record<string, Image> | null;
     containers: Record<string, Container> | null;
     containersStats: Record<string, Stats>;
+    statsHistory?: StatsHistory;
     users: User[];
     ownerFilter: string | number;
     textFilter: string;
@@ -179,7 +182,7 @@ const PodRow = ({ title, className, children }: { title: string; className?: str
 const statusOrder: Record<string, number> = { Running: 0, Degraded: 1, Paused: 2, Error: 3 };
 
 export const Pods = ({
-    pods, quadletPods, quadletContainers, images, containers, containersStats, users, ownerFilter, textFilter, filter,
+    pods, quadletPods, quadletContainers, images, containers, containersStats, statsHistory, users, ownerFilter, textFilter, filter,
     imageUpdates, onAddNotification, onFilterChanged, onContainerFilterChanged,
 }: PodsProps) => {
     const [memTotal, setMemTotal] = useState<number>(0);
@@ -332,6 +335,7 @@ export const Pods = ({
         });
 
         const isRunning = pod.Status === "Running" || pod.Status === "Degraded";
+        const io = sumRates(members.map(ref => statsHistory?.[makeKey(pod.uid, ref.Id)]));
         const memBase = uncapped === 0 && memCap > 0 ? memCap : memTotal;
         const memPct = memBase ? Math.min(100, Math.round(mem / memBase * 100)) : 0;
         const memVariant = memPct >= 90 ? ProgressVariant.danger : (memPct >= 75 ? ProgressVariant.warning : undefined);
@@ -460,6 +464,18 @@ export const Pods = ({
                                         {...(memVariant ? { variant: memVariant } : {})}
                                         aria-label={cockpit.format(_("Memory usage of pod $0"), pod.Name)} />
                             : <span className="podman-pod-facts">{_("not running")}</span>}
+                    </PodRow>
+
+                    <PodRow title={_("I/O")}>
+                        {isRunning && io.span
+                            ? (
+                                <span className="podman-pod-facts podman-pod-io">
+                                    {cockpit.format(_("net ↓ $0 ↑ $1"), cockpit.format_bytes_per_sec(io.rx), cockpit.format_bytes_per_sec(io.tx))}
+                                    {" · "}
+                                    {cockpit.format(_("disk R $0 W $1"), cockpit.format_bytes_per_sec(io.bi), cockpit.format_bytes_per_sec(io.bo))}
+                                </span>
+                            )
+                            : <span className="podman-pod-facts">{isRunning ? _("measuring…") : _("not running")}</span>}
                     </PodRow>
 
                     <PodRow title={_("Members")} className="podman-pod-row-members">

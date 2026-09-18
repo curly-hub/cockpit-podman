@@ -11,11 +11,11 @@
     grid-auto-rows: auto;
 }
 
-// header + six body rows, laid out on the gallery's tracks
+// header + seven body rows, laid out on the gallery's tracks
 .podman-pod-card {
     display: grid;
     grid-template-rows: subgrid;
-    grid-row: span 7;
+    grid-row: span 8;
 }
 
 // Cockpit's PatternFly override (.pf-v6-c-card .pf-v6-c-card__header) wraps card headers, which
@@ -47,12 +47,12 @@
     overflow-wrap: anywhere;
 }
 
-// Every card has the same six rows in the same order. Row heights come from the gallery tracks,
+// Every card has the same seven rows in the same order. Row heights come from the gallery tracks,
 // so a row grows for the whole gallery row when one card needs more room, and nothing is cut off.
 .podman-pod-body {
     display: grid;
     grid-template-rows: subgrid;
-    grid-row: span 6;
+    grid-row: span 7;
     padding-block-start: 0;
 }
 
@@ -98,4 +98,8 @@
     max-inline-size: 14rem;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.podman-pod-io {
+    font-variant-numeric: tabular-nums;
 }

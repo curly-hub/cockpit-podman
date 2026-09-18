@@ -1,0 +1,58 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
+.podman-resource-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--pf-t--global--spacer--xs);
+    padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+    border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+    border-radius: var(--pf-t--global--border--radius--medium);
+    min-inline-size: 0;
+}
+
+.podman-resource-title {
+    color: var(--pf-t--global--text--color--subtle);
+    font-size: var(--pf-t--global--font--size--sm);
+    font-weight: var(--pf-t--global--font--weight--body--bold);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.podman-resource-value {
+    font-size: var(--pf-t--global--font--size--xl);
+    font-weight: var(--pf-t--global--font--weight--heading--bold);
+    font-variant-numeric: tabular-nums;
+}
+
+.podman-resource-detail {
+    color: var(--pf-t--global--text--color--subtle);
+    font-size: var(--pf-t--global--font--size--sm);
+}
+
+.podman-sparkline {
+    inline-size: 100%;
+    block-size: 44px;
+    color: var(--pf-t--global--color--brand--default);
+    overflow: visible;
+
+    .podman-sparkline-line {
+        fill: none;
+        stroke: currentcolor;
+        stroke-width: 1.5;
+        vector-effect: non-scaling-stroke;
+    }
+
+    .podman-sparkline-area {
+        fill: currentcolor;
+        opacity: 0.15;
+    }
+
+    .podman-sparkline-baseline {
+        stroke: var(--pf-t--global--border--color--default);
+        stroke-width: 1;
+    }
+}
+
+.podman-sparkline-secondary {
+    color: var(--pf-t--global--color--status--info--default);
+}

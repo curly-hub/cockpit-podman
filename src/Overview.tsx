@@ -11,13 +11,15 @@ import { Tooltip } from "@patternfly/react-core/dist/esm/components/Tooltip";
 import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex";
 import { Gallery } from "@patternfly/react-core/dist/esm/layouts/Gallery";
 import {
-    CheckCircleIcon, CubeIcon, CubesIcon, ExclamationCircleIcon, ExclamationTriangleIcon,
-    LayerGroupIcon, MemoryIcon, MicrochipIcon, RedoIcon, ServerIcon, StopCircleIcon,
+    CheckCircleIcon, CubeIcon, CubesIcon, DatabaseIcon, ExclamationCircleIcon, ExclamationTriangleIcon,
+    HddIcon, LayerGroupIcon, MemoryIcon, MicrochipIcon, NetworkIcon, RedoIcon, ServerIcon, StopCircleIcon,
 } from '@patternfly/react-icons';
 
 import cockpit from 'cockpit';
 import * as machine_info from 'machine-info';
 
+import { sumRates } from './stats.ts';
+import type { StatsHistory } from './stats.ts';
 import { makeKey } from './util.js';
 import './Overview.scss';
 
@@ -70,6 +72,12 @@ interface User {
     name: string;
 }
 
+interface SystemDf {
+    ImagesSize?: number;
+    Containers?: { RWSize?: number }[] | null;
+    Volumes?: { Size?: number }[] | null;
+}
+
 export interface OverviewProps {
     users: User[];
     version: string;
@@ -77,6 +85,9 @@ export interface OverviewProps {
     selinuxAvailable: boolean;
     containers: Record<string, Container> | null;
     containersStats: Record<string, Stats>;
+    statsHistory?: StatsHistory;
+    systemDf?: Record<string, SystemDf>;
+    volumes?: Record<string, { uid: number | null }> | null;
     pods: Record<string, Pod> | null;
     images: Record<string, Image> | null;
     ownerFilter: string | number;
@@ -158,7 +169,7 @@ const Tile = ({ id, icon, title, value, detail, status }: TileProps) => (
 
 export const Overview = ({
     users, version, cgroupVersion, selinuxAvailable,
-    containers, containersStats, pods, images, ownerFilter, imageUpdates,
+    containers, containersStats, statsHistory, systemDf, volumes, pods, images, ownerFilter, imageUpdates,
     onFilterChanged, onContainerFilterChanged,
 }: OverviewProps) => {
     const [memTotal, setMemTotal] = useState<number>(0);
@@ -261,6 +272,17 @@ export const Overview = ({
         mode = _("Rootless");
     else if (hasRootful)
         mode = _("Rootful");
+
+    // --- I/O and storage ---
+    const rates = sumRates(containerList.filter(c => c.State?.Status === "running").map(c => statsHistory?.[c.key]));
+    const dfList = Object.entries(systemDf ?? {})
+            .filter(([uid]) => matchesOwner(uid === "null" ? null : Number(uid), ownerFilter))
+            .map(([, df]) => df);
+    const storageImages = dfList.reduce((sum, df) => sum + (df.ImagesSize ?? 0), 0);
+    const storageContainers = dfList.reduce((sum, df) => sum + (df.Containers ?? []).reduce((s2, c) => s2 + (c.RWSize ?? 0), 0), 0);
+    const storageVolumes = dfList.reduce((sum, df) => sum + (df.Volumes ?? []).reduce((s2, v) => s2 + (v.Size ?? 0), 0), 0);
+    const storageTotal = storageImages + storageContainers + storageVolumes;
+    const volumeCount = Object.values(volumes ?? {}).filter(v => matchesOwner(v.uid, ownerFilter)).length;
 
     const dangerCount = issues.filter(i => i.severity === "danger").length;
     const attentionStatus: Severity | "success" = dangerCount > 0 ? "danger" : (issues.length > 0 ? "warning" : "success");
@@ -377,6 +399,35 @@ export const Overview = ({
                                       )}
                                   </>
                               )} />
+                    <Tile id="network"
+                          icon={<NetworkIcon />}
+                          title={_("Network")}
+                          value={loading ? skel : (rates.span ? `↓ ${cockpit.format_bytes_per_sec(rates.rx)}` : "—")}
+                          detail={loading
+                              ? null
+                              : (rates.span
+                                  ? cockpit.format(_("↑ $0 · all running containers"), cockpit.format_bytes_per_sec(rates.tx))
+                                  : (counts.running ? _("Measuring…") : _("No running containers")))} />
+                    <Tile id="disk-io"
+                          icon={<HddIcon />}
+                          title={_("Disk I/O")}
+                          value={loading ? skel : (rates.span ? cockpit.format(_("R $0"), cockpit.format_bytes_per_sec(rates.bi)) : "—")}
+                          detail={loading
+                              ? null
+                              : (rates.span
+                                  ? cockpit.format(_("W $0 · all running containers"), cockpit.format_bytes_per_sec(rates.bo))
+                                  : (counts.running ? _("Measuring…") : _("No running containers")))} />
+                    <Tile id="storage"
+                          icon={<DatabaseIcon />}
+                          title={_("Storage")}
+                          value={loading ? skel : (dfList.length ? cockpit.format_bytes(storageTotal) : "—")}
+                          detail={loading
+                              ? null
+                              : (dfList.length
+                                  ? cockpit.format(_("images $0 · containers $1 · $2 volumes $3"),
+                                                   cockpit.format_bytes(storageImages), cockpit.format_bytes(storageContainers),
+                                                   volumeCount, cockpit.format_bytes(storageVolumes))
+                                  : _("Sizes not available"))} />
                 </Gallery>
 
                 <div className={`podman-overview-attention podman-overview-attention-${attentionStatus}`} id="podman-overview-attention">

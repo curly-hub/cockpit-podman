@@ -31,6 +31,7 @@ import ContainerHealthLogs from './ContainerHealthLogs.jsx';
 import ContainerIntegration from './ContainerIntegration.jsx';
 import ContainerLogs from './ContainerLogs.jsx';
 import ContainerRenameModal from './ContainerRenameModal.jsx';
+import ContainerResources from './ContainerResources.tsx';
 import ContainerRestoreModal from './ContainerRestoreModal.jsx';
 import ContainerSecurity, { securityWarnings } from './ContainerSecurity.tsx';
 import ContainerTerminal from './ContainerTerminal.jsx';
@@ -582,6 +583,11 @@ class Containers extends React.Component {
                 name: _("Details"),
                 renderer: ContainerDetails,
                 data: { container }
+            });
+            tabs.push({
+                name: _("Resources"),
+                renderer: ContainerResources,
+                data: { container, stats: containerStats, history: this.props.statsHistory?.[container.key] }
             });
 
             if (!container.isDownloading) {
