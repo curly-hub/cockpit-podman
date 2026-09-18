@@ -1,0 +1,12 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
+.podman-pod-logs-modal .pf-v6-c-modal-box__body {
+    // the terminal sizes itself to this box; keep the modal from growing past the viewport
+    overflow: hidden;
+}
+
+.podman-pod-logs {
+    // xterm paints its own dark background; the border keeps it readable on light and dark themes
+    border: 1px solid var(--pf-t--global--border--color--default);
+    inline-size: 100%;
+}

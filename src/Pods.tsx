@@ -24,7 +24,8 @@ import * as machine_info from 'machine-info';
 
 import { ImageRunModal } from './ImageRunModal.jsx';
 import { PodActions } from './PodActions.jsx';
-import { canManageStack, isOutdated, recreateStack, stackOfPod, tagToImageId } from './compose.ts';
+import { PodLogsModal } from './PodLogs.tsx';
+import { canManageStack, containerStack, isOutdated, recreateStack, stackOfPod, tagToImageId } from './compose.ts';
 import { RelativeTime, makeKey, image_name, PodmanInfoContext } from './util.js';
 import './Pods.scss';
 
@@ -329,6 +330,23 @@ export const Pods = ({
             memLabel += cockpit.format(_(" · $0% of host"), memPct);
 
         const stackItems: React.ReactNode[] = [];
+        // only real Podman containers have logs; inactive quadlet members are unit files
+        const logSources = (pod.Containers ?? [])
+                .filter(ref => ref.Id !== pod.InfraId)
+                .map(ref => {
+                    const container = containers?.[makeKey(pod.uid, ref.Id)];
+                    const service = stack ? containerStack(container)?.service : "";
+                    return { id: ref.Id, name: service || container?.Name || ref.Names || ref.Id.slice(0, 12) };
+                });
+        if (logSources.length > 0) {
+            stackItems.push(
+                <DropdownItem key="pod-logs" className="pod-action-logs" component="button"
+                              description={_("Combined output of every container")}
+                              onClick={() => Dialogs.show(<PodLogsModal uid={pod.uid} podName={pod.Name} sources={logSources} />)}>
+                    {_("View logs")}
+                </DropdownItem>,
+            );
+        }
         if (canManageStack(pod.uid, stack)) {
             stackItems.push(
                 <DropdownItem key="stack-pull-recreate" className="pod-action-stack-pull" component="button"
