@@ -76,6 +76,8 @@ export type Connection = {
     uid: Uid;
     monitor: (path: string, callback: MonitorCallback, return_raw?: boolean) => Promise<void>;
     call: (options: JsonObject) => Promise<string>;
+    // like call(), but resolves with the undecoded body (multiplexed log frames)
+    callRaw: (options: JsonObject) => Promise<Uint8Array>;
     close: () => void;
 };
 
@@ -105,6 +107,24 @@ function connect(uid: Uid): Connection {
                         const content_text = (content instanceof Uint8Array)
                             ? decoder.decode(content as Uint8Array)
                             : content;
+                        debug(user_str, `call ${id} error:`, JSON.stringify(error), "content", content_text);
+                        reject(format_error(error, content_text));
+                    });
+        });
+    }
+
+    function callRaw(options: JsonObject): Promise<Uint8Array> {
+        const id = call_id++;
+        debug(user_str, `call ${id} (raw):`, JSON.stringify(options));
+        return new Promise((resolve, reject) => {
+            http.request(options)
+                    .then((result: Uint8Array) => {
+                        debug(user_str, `call ${id} result: ${result.byteLength} bytes`);
+                        resolve(result);
+                    })
+                    // @ts-expect-error: magic cockpit defer error extra "content" parameter
+                    .catch((error: object, content: unknown) => {
+                        const content_text = (content instanceof Uint8Array) ? decoder.decode(content) : content;
                         debug(user_str, `call ${id} error:`, JSON.stringify(error), "content", content_text);
                         reject(format_error(error, content_text));
                     });
@@ -176,7 +196,7 @@ function connect(uid: Uid): Connection {
         raw_channels.forEach(ch => ch.close());
     }
 
-    return { uid, monitor, call, close };
+    return { uid, monitor, call, callRaw, close };
 }
 
 export default {

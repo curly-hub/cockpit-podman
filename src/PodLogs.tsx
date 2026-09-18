@@ -89,10 +89,8 @@ class FrameReader {
     }
 }
 
-function logsPath(id: string, query: Record<string, string>): string {
-    const params = new URLSearchParams({ stdout: "true", stderr: "true", timestamps: "true", ...query });
-    return `${client.VERSION}libpod/containers/${id}/logs?${params.toString()}`;
-}
+const logsPath = (id: string) => `${client.VERSION}libpod/containers/${id}/logs`;
+const logsQuery = (query: Record<string, string>) => ({ stdout: "true", stderr: "true", timestamps: "true", ...query });
 
 export const PodLogsModal = ({ uid, podName, sources }: { uid: Uid; podName: string; sources: PodLogSource[] }) => {
     const Dialogs = useDialogs();
@@ -121,6 +119,7 @@ export const PodLogsModal = ({ uid, podName, sources }: { uid: Uid; podName: str
         } catch (ex) {
             console.warn("PodLogs: WebGL renderer unavailable, using DOM renderer:", String(ex));
         }
+        // reading the tail of a journald-backed container takes Podman a few seconds
         view.write(_("Loading logs..."));
 
         // missing API: https://github.com/xtermjs/xterm.js/issues/702
@@ -167,6 +166,8 @@ export const PodLogsModal = ({ uid, podName, sources }: { uid: Uid; podName: str
             // newest history line of every member
             const last: LogLine[] = sources.map(() => ({ key: "", stamp: "", text: "" }));
             const history: { i: number; line: LogLine }[] = [];
+            // Podman keeps the connection open after a non-follow response, so a streaming read
+            // would never finish; a plain request ends with the chunked body instead
             await Promise.all(sources.map((source, i) => {
                 const reader = new FrameReader(body => {
                     const line = parseLine(body);
@@ -174,7 +175,8 @@ export const PodLogsModal = ({ uid, podName, sources }: { uid: Uid; podName: str
                     if (line.key > last[i].key)
                         last[i] = line;
                 });
-                return connections[i].monitor(logsPath(source.id, { tail: String(TAIL) }), (data: Uint8Array) => reader.push(data), true)
+                return connections[i].callRaw({ method: "GET", path: logsPath(source.id), body: "", params: logsQuery({ tail: String(TAIL) }) })
+                        .then(data => reader.push(data))
                         .catch(ex => failed(source, ex));
             }));
             if (closed)
@@ -201,7 +203,8 @@ export const PodLogsModal = ({ uid, podName, sources }: { uid: Uid; podName: str
                         last[i] = line;
                     writeLine(i, line);
                 });
-                connections[i].monitor(logsPath(source.id, { follow: "true", since }), (data: Uint8Array) => reader.push(data), true)
+                const params = new URLSearchParams(logsQuery({ follow: "true", since }));
+                connections[i].monitor(`${logsPath(source.id)}?${params.toString()}`, (data: Uint8Array) => reader.push(data), true)
                         .then(() => {
                             if (!closed)
                                 view.writeln(prefix(i) + `\x1b[2m${_("log stream ended")}\x1b[0m`);
