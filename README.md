@@ -16,6 +16,7 @@ over the Cockpit bridge; there is no agent, no database and no separate login.
 
 ## Contents
 
+- [Quick install on Fedora](#quick-install-on-fedora)
 - [Overview](#overview)
 - [Pods and compose stacks](#pods-and-compose-stacks)
 - [Containers](#containers)
@@ -24,8 +25,63 @@ over the Cockpit bridge; there is no agent, no database and no separate login.
 - [Logs](#logs)
 - [Diagnostics](#diagnostics)
 - [Requirements](#requirements)
-- [Building and installing](#building-and-installing)
+- [Development](#development)
 - [Upstream](#upstream)
+
+## Quick install on Fedora
+
+Everything below is copy-and-paste. Path A gives the page to your own user
+only and needs no root. Path B installs it for every user.
+
+**1. Install Cockpit and Podman and enable their sockets**
+
+    sudo dnf install cockpit cockpit-podman podman nodejs make git
+    sudo systemctl enable --now cockpit.socket podman.socket
+    systemctl --user enable --now podman.socket
+
+The packaged cockpit-podman can stay; this branch takes priority over it.
+
+Optional, only for the features that use them:
+
+    sudo dnf install podman-compose skopeo    # compose stacks, image update checks
+
+Trivy, for vulnerability scans, is not in Fedora's repositories; see
+[trivy.dev](https://trivy.dev/latest/getting-started/installation/).
+
+**2. Get the source and build it**
+
+    git clone https://github.com/curly-hub/cockpit-podman
+    cd cockpit-podman
+    git checkout podorel-ui
+    make
+
+**3a. Path A: install for your own user (no root)**
+
+    make devel-install
+
+Open <https://localhost:9090>, log in as yourself and click **Podman**.
+Reload the page if it was already open. Other users still see the packaged
+page. `make devel-uninstall` removes the link again.
+
+**3b. Path B: install for every user**
+
+    sudo dnf install gettext
+    sudo make install
+
+The page lands in `/usr/local/share/cockpit/podman`, which Cockpit prefers
+over the packaged copy in `/usr/share`. Reload Cockpit. To remove it, delete
+that directory.
+
+**Updating later**
+
+    cd cockpit-podman
+    git pull
+    make            # Path A picks this up on reload; Path B needs sudo make install again
+
+**If the Podman page shows an error instead of the overview**, the page
+itself says which step failed (socket inactive, masked, permission denied)
+and offers a button to fix it. On a fresh Fedora the usual cause is the user
+socket not being enabled, which step 1 covers.
 
 ## Overview
 
@@ -169,31 +225,10 @@ the socket, plus a link to the journal.
 - Optional, for the features that use them: `podman-compose` (stacks),
   `skopeo` (image update checks), `trivy` (vulnerability scans).
 
-## Building and installing
+## Development
 
-On Fedora:
-
-    sudo dnf install nodejs make git
-
-Then:
-
-    git clone https://github.com/curly-hub/cockpit-podman
-    cd cockpit-podman
-    git checkout podorel-ui
-    make
-
-This builds the page into `dist/`.
-
-For your own user only, without touching the packaged cockpit-podman:
-
-    make devel-install
-
-That links `~/.local/share/cockpit/podman` to `dist/`; reload the Podman page in
-Cockpit. `make watch` rebuilds on every source change, and `make devel-uninstall`
-removes the link again.
-
-System-wide, `sudo make install` puts the page in `/usr/local/share/cockpit/`
-and needs `gettext` for the translations. `make rpm` builds an RPM.
+`make watch` rebuilds `dist/` on every source change; with Path A installed,
+reloading the page shows the result. `make rpm` builds an RPM.
 
 ### Checks
 
