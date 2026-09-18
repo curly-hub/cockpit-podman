@@ -43,20 +43,21 @@
     overflow-wrap: anywhere;
 }
 
-// Every card has the same six rows in the same order, with the same minimum height per row,
-// so the cards of a gallery row line up section by section.
+// Every card has the same six rows in the same order, each with a fixed height, so every card in
+// the gallery is exactly the same height. Width is whatever the gallery grants; rows that would
+// need more room scroll inside their fixed height instead of growing the card.
 .podman-pod-body {
     display: grid;
-    grid-template-rows: repeat(5, auto) 1fr;
+    grid-template-rows: repeat(6, auto);
     padding-block-start: 0;
 }
 
 .podman-pod-row {
     display: grid;
-    grid-template-columns: 6rem minmax(0, 1fr);
+    grid-template-columns: 7rem minmax(0, 1fr);
     column-gap: var(--pf-t--global--spacer--sm);
     align-items: center;
-    min-block-size: 2.25rem;
+    block-size: 2.5rem;
     padding-block: var(--pf-t--global--spacer--xs);
 
     + .podman-pod-row {
@@ -68,21 +69,35 @@
     color: var(--pf-t--global--text--color--subtle);
     font-size: var(--pf-t--global--font--size--sm);
     font-weight: var(--pf-t--global--font--weight--body--bold);
+    white-space: nowrap;
 }
 
 .podman-pod-row-value {
     min-inline-size: 0;
+    max-block-size: 100%;
+    overflow: hidden;
 }
 
-// label rows are one label high; a second line of labels grows the row for the whole gallery row
-.podman-pod-row-labels {
-    min-block-size: 2.5rem;
+// label rows stay one line high; extra labels scroll sideways rather than wrapping
+.podman-pod-row-labels .podman-pod-row-value {
+    overflow-x: auto;
+    scrollbar-width: thin;
+
+    .pf-v6-c-label-group__list {
+        flex-wrap: nowrap;
+    }
 }
 
-// the member list takes whatever height is left and starts at the top of it
+// the member list is two label lines high; larger pods scroll inside it
 .podman-pod-row-members {
     align-items: start;
-    min-block-size: 4rem;
+    block-size: 5.25rem;
+
+    .podman-pod-row-value {
+        max-block-size: 100%;
+        overflow-y: auto;
+        scrollbar-width: thin;
+    }
 }
 
 .podman-pod-facts {

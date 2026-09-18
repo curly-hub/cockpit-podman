@@ -483,7 +483,7 @@ export const Pods = ({
     let body;
     if (loading) {
         body = (
-            <Gallery hasGutter minWidths={{ default: "18rem" }}>
+            <Gallery hasGutter minWidths={{ default: "26rem" }}>
                 {[0, 1, 2].map(i => (
                     <Card isCompact key={i} className="podman-pod-card">
                         <CardBody className="podman-pod-body">
@@ -514,7 +514,7 @@ export const Pods = ({
         );
     } else {
         body = (
-            <Gallery hasGutter minWidths={{ default: "18rem" }} className="podman-pod-gallery">
+            <Gallery hasGutter minWidths={{ default: "26rem" }} className="podman-pod-gallery">
                 {podList.map(renderPod)}
             </Gallery>
         );
