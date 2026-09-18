@@ -164,6 +164,14 @@ function containerLabelIcon(status: string, unhealthy: boolean, looping: boolean
     return <StopCircleIcon />;
 }
 
+/* One titled row of a pod card; every card shows the same rows in the same order. */
+const PodRow = ({ title, className, children }: { title: string; className?: string; children: React.ReactNode }) => (
+    <div className={"podman-pod-row" + (className ? " " + className : "")}>
+        <span className="podman-pod-row-title">{title}</span>
+        <div className="podman-pod-row-value">{children}</div>
+    </div>
+);
+
 const statusOrder: Record<string, number> = { Running: 0, Degraded: 1, Paused: 2, Error: 3 };
 
 export const Pods = ({
@@ -382,75 +390,91 @@ export const Pods = ({
                     </CardTitle>
                 </CardHeader>
                 <CardBody className="podman-pod-body">
-                    <LabelGroup numLabels={6}>
-                        {statusLabel(pod.Status)}
-                        {unhealthy > 0 &&
-                            <Label status="danger" icon={<ExclamationCircleIcon />}>{cockpit.format(cockpit.ngettext("$0 unhealthy", "$0 unhealthy", unhealthy), unhealthy)}</Label>}
-                        {looping > 0 &&
-                            <Label status="warning" icon={<RedoIcon />}>{cockpit.format(cockpit.ngettext("$0 restart loop", "$0 restart loops", looping), looping)}</Label>}
-                        {unhealthy === 0 && looping === 0 && isRunning && members.length > 0 &&
-                            <Label color="green" variant="outline" icon={<CheckCircleIcon />}>{_("Healthy")}</Label>}
-                        {stack &&
-                            <Tooltip content={stack.workingDir ? `${stack.workingDir}/${stack.configFiles.join(", ") || "compose.yaml"}` : stack.project}>
-                                <Label color="blue" icon={<LayerGroupIcon />}>{cockpit.format(_("Compose: $0"), stack.project)}</Label>
-                            </Tooltip>}
-                        {outdated > 0 &&
-                            <Tooltip content={_("A newer image was pulled; recreate the stack to use it.")}>
-                                <Label status="warning" icon={<ArrowCircleUpIcon />}>{cockpit.format(cockpit.ngettext("$0 newer image pulled", "$0 newer images pulled", outdated), outdated)}</Label>
-                            </Tooltip>}
-                        {updatesAvailable > 0 && outdated === 0 &&
-                            <Tooltip content={_("The registry has a newer image; use Pull and recreate stack.")}>
-                                <Label status="warning" icon={<ArrowCircleUpIcon />}>{cockpit.format(cockpit.ngettext("$0 image update available", "$0 image updates available", updatesAvailable), updatesAvailable)}</Label>
-                            </Tooltip>}
-                        {busy && <Label color="blue" icon={<Spinner size="sm" />}>{busy}</Label>}
-                        {isPodService && <Label color="purple">{_("systemd")}</Label>}
-                        {users.filter(u => u.con).length > 1 && user &&
-                            <Label color="grey">{pod.uid === 0 ? _("system") : user.name}</Label>}
-                    </LabelGroup>
-
-                    <div className="podman-pod-facts">
-                        {cockpit.format(cockpit.ngettext("$0 of $1 container running", "$0 of $1 containers running", members.length), running, members.length)}
-                        {pod.Created && <> · {_("created")} <RelativeTime time={pod.Created} /></>}
-                    </div>
-
-                    {isRunning && (
-                        <>
-                            <Progress title={_("CPU")}
-                                      value={Math.min(100, cpu)}
-                                      label={sampled ? `${cpu.toFixed(1)}%` : _("n/a")}
-                                      size={ProgressSize.sm}
-                                      measureLocation={ProgressMeasureLocation.outside}
-                                      aria-label={cockpit.format(_("CPU usage of pod $0"), pod.Name)} />
-                            <Progress title={_("Memory")}
-                                      value={memPct}
-                                      label={memLabel}
-                                      size={ProgressSize.sm}
-                                      measureLocation={ProgressMeasureLocation.outside}
-                                      {...(memVariant ? { variant: memVariant } : {})}
-                                      aria-label={cockpit.format(_("Memory usage of pod $0"), pod.Name)} />
+                    <PodRow title={_("Status")} className="podman-pod-row-labels">
+                        <LabelGroup numLabels={4}>
+                            {statusLabel(pod.Status)}
+                            {unhealthy > 0 &&
+                                <Label status="danger" icon={<ExclamationCircleIcon />}>{cockpit.format(cockpit.ngettext("$0 unhealthy", "$0 unhealthy", unhealthy), unhealthy)}</Label>}
+                            {looping > 0 &&
+                                <Label status="warning" icon={<RedoIcon />}>{cockpit.format(cockpit.ngettext("$0 restart loop", "$0 restart loops", looping), looping)}</Label>}
+                            {unhealthy === 0 && looping === 0 && isRunning && members.length > 0 &&
+                                <Label color="green" variant="outline" icon={<CheckCircleIcon />}>{_("Healthy")}</Label>}
                             {uncapped > 0 &&
-                                <div>
-                                    <Tooltip content={_("Running containers without a memory limit can consume all host memory.")}>
-                                        <Label status="warning" icon={<ExclamationTriangleIcon />}>
-                                            {cockpit.format(cockpit.ngettext("$0 container without memory limit", "$0 containers without memory limit", uncapped), uncapped)}
-                                        </Label>
-                                    </Tooltip>
-                                </div>}
-                        </>
-                    )}
-
-                    {memberDetails.length > 0 &&
-                        <LabelGroup numLabels={8} className="podman-pod-containers">
-                            {memberDetails.map(m => (
-                                <Tooltip key={m.ref.Id} content={m.isUnhealthy ? _("Health check is failing") : (m.isLooping ? _("Possible restart loop") : m.status)}>
-                                    <Label variant="outline" color={containerLabelColor(m.status, m.isUnhealthy)}
-                                           icon={containerLabelIcon(m.status, m.isUnhealthy, m.isLooping)}
-                                           onClick={() => focusTable(m.name, m.status !== "running")}>
-                                        {m.name}
+                                <Tooltip content={_("Running containers without a memory limit can consume all host memory.")}>
+                                    <Label status="warning" icon={<ExclamationTriangleIcon />}>
+                                        {cockpit.format(cockpit.ngettext("$0 without memory limit", "$0 without memory limit", uncapped), uncapped)}
                                     </Label>
-                                </Tooltip>
-                            ))}
-                        </LabelGroup>}
+                                </Tooltip>}
+                            {busy && <Label color="blue" icon={<Spinner size="sm" />}>{busy}</Label>}
+                        </LabelGroup>
+                    </PodRow>
+
+                    <PodRow title={_("Managed by")} className="podman-pod-row-labels">
+                        <LabelGroup numLabels={4}>
+                            {stack &&
+                                <Tooltip content={stack.workingDir ? `${stack.workingDir}/${stack.configFiles.join(", ") || "compose.yaml"}` : stack.project}>
+                                    <Label color="blue" icon={<LayerGroupIcon />}>{cockpit.format(_("Compose: $0"), stack.project)}</Label>
+                                </Tooltip>}
+                            {isPodService && <Label color="purple">{_("systemd")}</Label>}
+                            {!stack && !isPodService && <Label variant="outline">{_("Podman")}</Label>}
+                            {outdated > 0 &&
+                                <Tooltip content={_("A newer image was pulled; recreate the stack to use it.")}>
+                                    <Label status="warning" icon={<ArrowCircleUpIcon />}>{cockpit.format(cockpit.ngettext("$0 newer image pulled", "$0 newer images pulled", outdated), outdated)}</Label>
+                                </Tooltip>}
+                            {updatesAvailable > 0 && outdated === 0 &&
+                                <Tooltip content={_("The registry has a newer image; use Pull and recreate stack.")}>
+                                    <Label status="warning" icon={<ArrowCircleUpIcon />}>{cockpit.format(cockpit.ngettext("$0 image update available", "$0 image updates available", updatesAvailable), updatesAvailable)}</Label>
+                                </Tooltip>}
+                            {users.filter(u => u.con).length > 1 && user &&
+                                <Label color="grey">{pod.uid === 0 ? _("system") : user.name}</Label>}
+                        </LabelGroup>
+                    </PodRow>
+
+                    <PodRow title={_("Containers")}>
+                        <span className="podman-pod-facts">
+                            {cockpit.format(cockpit.ngettext("$0 of $1 running", "$0 of $1 running", members.length), running, members.length)}
+                            {pod.Created && <> · {_("created")} <RelativeTime time={pod.Created} /></>}
+                        </span>
+                    </PodRow>
+
+                    <PodRow title={_("CPU")}>
+                        {isRunning
+                            ? <Progress value={Math.min(100, cpu)}
+                                        label={sampled ? `${cpu.toFixed(1)}%` : _("n/a")}
+                                        size={ProgressSize.sm}
+                                        measureLocation={ProgressMeasureLocation.outside}
+                                        aria-label={cockpit.format(_("CPU usage of pod $0"), pod.Name)} />
+                            : <span className="podman-pod-facts">{_("not running")}</span>}
+                    </PodRow>
+
+                    <PodRow title={_("Memory")}>
+                        {isRunning
+                            ? <Progress value={memPct}
+                                        label={memLabel}
+                                        size={ProgressSize.sm}
+                                        measureLocation={ProgressMeasureLocation.outside}
+                                        {...(memVariant ? { variant: memVariant } : {})}
+                                        aria-label={cockpit.format(_("Memory usage of pod $0"), pod.Name)} />
+                            : <span className="podman-pod-facts">{_("not running")}</span>}
+                    </PodRow>
+
+                    <PodRow title={_("Members")} className="podman-pod-row-members">
+                        {memberDetails.length > 0
+                            ? (
+                                <LabelGroup numLabels={8} className="podman-pod-containers">
+                                    {memberDetails.map(m => (
+                                        <Tooltip key={m.ref.Id} content={m.isUnhealthy ? _("Health check is failing") : (m.isLooping ? _("Possible restart loop") : m.status)}>
+                                            <Label variant="outline" color={containerLabelColor(m.status, m.isUnhealthy)}
+                                                   icon={containerLabelIcon(m.status, m.isUnhealthy, m.isLooping)}
+                                                   onClick={() => focusTable(m.name, m.status !== "running")}>
+                                                {m.name}
+                                            </Label>
+                                        </Tooltip>
+                                    ))}
+                                </LabelGroup>
+                            )
+                            : <span className="podman-pod-facts">{_("No containers")}</span>}
+                    </PodRow>
                 </CardBody>
             </Card>
         );
