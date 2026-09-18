@@ -18,6 +18,7 @@ import cockpit from 'cockpit';
 import { ListingPanel } from 'cockpit-components-listing-panel';
 import { ListingTable } from "cockpit-components-table";
 
+import { ImageBuildModal } from './ImageBuildModal.tsx';
 import { ImageDeleteModal } from './ImageDeleteModal.jsx';
 import ImageDetails from './ImageDetails.jsx';
 import ImageHistory from './ImageHistory.jsx';
@@ -74,6 +75,11 @@ class Images extends React.Component {
     onOpenNewImagesDialog = () => {
         const Dialogs = this.context;
         Dialogs.show(<ImageSearchModal downloadImage={this.downloadImage} users={this.props.users} />);
+    };
+
+    onOpenBuildDialog = () => {
+        const Dialogs = this.context;
+        Dialogs.show(<ImageBuildModal users={this.props.users} onAddNotification={this.props.onAddNotification} />);
     };
 
     _con_for = image => this.props.users.find(u => u.uid === image.uid).con;
@@ -374,6 +380,7 @@ class Images extends React.Component {
                                     {this.props.imageUpdatesChecking ? _("Checking…") : _("Check for updates")}
                                 </Button>
                                 <ImageOverActions handleDownloadNewImage={this.onOpenNewImagesDialog}
+                                                  handleBuildImage={this.onOpenBuildDialog}
                                                   handlePullAllImages={this.onPullAllImages}
                                                   handlePruneUsedImages={this.onOpenPruneUnusedImagesDialog}
                                                   unusedImages={unusedImages} />
@@ -413,7 +420,7 @@ class Images extends React.Component {
     }
 }
 
-const ImageOverActions = ({ handleDownloadNewImage, handlePullAllImages, handlePruneUsedImages, unusedImages }) => {
+const ImageOverActions = ({ handleDownloadNewImage, handleBuildImage, handlePullAllImages, handlePruneUsedImages, unusedImages }) => {
     const actions = [
         <DropdownItem
             key="download-new-image"
@@ -421,6 +428,14 @@ const ImageOverActions = ({ handleDownloadNewImage, handlePullAllImages, handleP
             onClick={() => handleDownloadNewImage()}
         >
             {_("Download new image")}
+        </DropdownItem>,
+        <DropdownItem
+            key="build-image"
+            id="build-image-button"
+            component="button"
+            onClick={() => handleBuildImage()}
+        >
+            {_("Build image from Containerfile")}
         </DropdownItem>,
         <DropdownItem
             key="pull-all-images"
