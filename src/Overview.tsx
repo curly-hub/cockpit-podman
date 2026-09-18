@@ -12,12 +12,14 @@ import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex";
 import { Gallery } from "@patternfly/react-core/dist/esm/layouts/Gallery";
 import {
     CheckCircleIcon, CubeIcon, CubesIcon, DatabaseIcon, ExclamationCircleIcon, ExclamationTriangleIcon,
-    HddIcon, LayerGroupIcon, MemoryIcon, MicrochipIcon, NetworkIcon, RedoIcon, ServerIcon, StopCircleIcon,
+    HddIcon, LayerGroupIcon, ListIcon, MemoryIcon, MicrochipIcon, NetworkIcon, RedoIcon, ServerIcon, StopCircleIcon,
 } from '@patternfly/react-icons';
+import { useDialogs } from "dialogs.jsx";
 
 import cockpit from 'cockpit';
 import * as machine_info from 'machine-info';
 
+import { ContainerLogsModal } from './ContainerLogsModal.tsx';
 import { sumRates } from './stats.ts';
 import type { StatsHistory } from './stats.ts';
 import { makeKey } from './util.js';
@@ -172,6 +174,7 @@ export const Overview = ({
     containers, containersStats, statsHistory, systemDf, volumes, pods, images, ownerFilter, imageUpdates,
     onFilterChanged, onContainerFilterChanged,
 }: OverviewProps) => {
+    const Dialogs = useDialogs();
     const [memTotal, setMemTotal] = useState<number>(0);
 
     useEffect(() => {
@@ -298,16 +301,23 @@ export const Overview = ({
         <Card id="containers-overview" className="containers-overview" isPlain={false}>
             <CardHeader actions={{
                 actions: (
-                    <LabelGroup className="podman-overview-runtime-labels" numLabels={6}>
-                        <Label isCompact>{cockpit.format(_("Podman $0"), version)}</Label>
-                        {cgroupVersion && <Label isCompact>{cockpit.format(_("cgroups $0"), cgroupVersion)}</Label>}
-                        {selinuxAvailable && <Label isCompact color="blue">{_("SELinux")}</Label>}
-                        {connected.map(u => (
-                            <Tooltip key={String(u.uid)} content={socketPath(u.uid)}>
-                                <Label isCompact color="green" icon={<CheckCircleIcon />}>{ownerLabel(u.uid, u.name)}</Label>
-                            </Tooltip>
-                        ))}
-                    </LabelGroup>
+                    <Flex alignItems={{ default: "alignItemsCenter" }} spaceItems={{ default: "spaceItemsMd" }}>
+                        <LabelGroup className="podman-overview-runtime-labels" numLabels={6}>
+                            <Label isCompact>{cockpit.format(_("Podman $0"), version)}</Label>
+                            {cgroupVersion && <Label isCompact>{cockpit.format(_("cgroups $0"), cgroupVersion)}</Label>}
+                            {selinuxAvailable && <Label isCompact color="blue">{_("SELinux")}</Label>}
+                            {connected.map(u => (
+                                <Tooltip key={String(u.uid)} content={socketPath(u.uid)}>
+                                    <Label isCompact color="green" icon={<CheckCircleIcon />}>{ownerLabel(u.uid, u.name)}</Label>
+                                </Tooltip>
+                            ))}
+                        </LabelGroup>
+                        <Button variant="secondary" size="sm" id="overview-view-logs" icon={<ListIcon />}
+                                isDisabled={!containers}
+                                onClick={() => Dialogs.show(<ContainerLogsModal users={users} containers={containers} pods={pods} />)}>
+                            {_("View logs")}
+                        </Button>
+                    </Flex>
                 ),
             }}>
                 <CardTitle>

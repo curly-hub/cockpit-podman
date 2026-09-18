@@ -10,3 +10,20 @@
     border: 1px solid var(--pf-t--global--border--color--default);
     inline-size: 100%;
 }
+
+.podman-all-logs-toolbar {
+    margin-block-end: var(--pf-t--global--spacer--sm);
+
+    .pf-v6-c-toolbar__content {
+        padding-inline: 0;
+    }
+}
+
+.podman-all-logs-select {
+    flex: 1 1 24rem;
+    min-inline-size: 0;
+}
+
+.podman-all-logs-filter {
+    flex: 1 1 16rem;
+}
