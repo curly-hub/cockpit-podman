@@ -22,6 +22,7 @@ import { useDialogs, DialogsContext } from "dialogs.jsx";
 import cockpit from 'cockpit';
 import * as machine_info from 'machine-info';
 
+import { ComposeDeployModal } from './ComposeDeployModal.tsx';
 import { ImageRunModal } from './ImageRunModal.jsx';
 import { PodActions } from './PodActions.jsx';
 import { PodLogsModal } from './PodLogs.tsx';
@@ -64,7 +65,10 @@ interface Container {
         Health?: { Status?: string };
         Healthcheck?: { Status?: string };
     };
-    HostConfig?: { Memory?: number };
+    HostConfig?: {
+        Memory?: number;
+        PortBindings?: Record<string, { HostIp?: string; HostPort?: string }[] | null> | null;
+    };
 }
 
 interface Stats {
@@ -524,7 +528,14 @@ export const Pods = ({
 
     return (
         <Card id="containers-pods" className="containers-pods">
-            <CardHeader>
+            <CardHeader actions={{
+                actions: (
+                    <Button variant="secondary" id="pods-deploy-stack"
+                            onClick={() => Dialogs.show(<ComposeDeployModal users={users} containers={containers} onAddNotification={onAddNotification} />)}>
+                        {_("Deploy compose stack")}
+                    </Button>
+                ),
+            }}>
                 <Flex alignItems={{ default: "alignItemsBaseline" }}>
                     <CardTitle>
                         <Content component={ContentVariants.h1} className="containers-pods-title">{_("Pods")}</Content>

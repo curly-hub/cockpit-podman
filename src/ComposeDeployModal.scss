@@ -1,0 +1,32 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
+.podman-compose-text textarea,
+.podman-compose-output,
+.podman-compose-error {
+    font-family: var(--pf-t--global--font--family--mono);
+    font-size: var(--pf-t--global--font--size--sm);
+}
+
+.podman-compose-status {
+    margin-block-start: var(--pf-t--global--spacer--md);
+}
+
+.podman-compose-output {
+    max-block-size: 18rem;
+    overflow: auto;
+    padding: var(--pf-t--global--spacer--sm);
+    border: 1px solid var(--pf-t--global--border--color--default);
+    border-radius: var(--pf-t--global--border--radius--small);
+    background: var(--pf-t--global--background--color--secondary--default);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.podman-compose-error {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.podman-compose-conflict {
+    margin-block-start: var(--pf-t--global--spacer--sm);
+}

@@ -56,16 +56,31 @@ export function stackOfPod(members: (Labeled | undefined | null)[]): StackInfo |
 export const canManageStack = (uid: Uid, stack: StackInfo | null): stack is StackInfo =>
     !!stack && !!stack.workingDir && (uid === null || uid === 0);
 
-export function composeSpawn(uid: Uid, stack: StackInfo, args: string[]) {
+export interface ComposeTarget {
+    workingDir: string;
+    configFiles: string[];
+    project?: string | null;
+}
+
+/* Run podman-compose for a project. `err` selects whether stderr is merged into the output
+ * stream ("out", for live logs) or returned as the rejection message ("message"). */
+export function composeProcess(uid: Uid, target: ComposeTarget, args: string[], err: "out" | "message" = "message") {
     return cockpit.spawn(
-        ["podman-compose", ...stack.configFiles.flatMap(f => ["-f", f]), ...args],
+        [
+            "podman-compose",
+            ...(target.project ? ["-p", target.project] : []),
+            ...target.configFiles.flatMap(f => ["-f", f]),
+            ...args,
+        ],
         {
-            directory: stack.workingDir,
-            err: "message",
+            directory: target.workingDir,
+            err,
             environ: ["LC_ALL=C.UTF-8"],
             ...(uid === 0 ? { superuser: "require" as const } : {}),
         });
 }
+
+export const composeSpawn = (uid: Uid, stack: StackInfo, args: string[]) => composeProcess(uid, stack, args);
 
 /* `podman-compose up -d` recreates containers whose image or configuration changed. */
 export async function recreateStack(uid: Uid, stack: StackInfo, pull: boolean): Promise<void> {
