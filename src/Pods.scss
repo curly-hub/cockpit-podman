@@ -6,12 +6,16 @@
 }
 
 .podman-pod-gallery {
-    // every row as tall as the tallest card, so all cards line up
-    grid-auto-rows: 1fr;
+    // the row tracks are shared with the cards (subgrid), so every card in a gallery row is the
+    // same height and its sections line up with its neighbours' without clipping or scrolling
+    grid-auto-rows: auto;
 }
 
+// header + six body rows, laid out on the gallery's tracks
 .podman-pod-card {
-    block-size: 100%;
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 7;
 }
 
 // Cockpit's PatternFly override (.pf-v6-c-card .pf-v6-c-card__header) wraps card headers, which
@@ -43,12 +47,12 @@
     overflow-wrap: anywhere;
 }
 
-// Every card has the same six rows in the same order, each with a fixed height, so every card in
-// the gallery is exactly the same height. Width is whatever the gallery grants; rows that would
-// need more room scroll inside their fixed height instead of growing the card.
+// Every card has the same six rows in the same order. Row heights come from the gallery tracks,
+// so a row grows for the whole gallery row when one card needs more room, and nothing is cut off.
 .podman-pod-body {
     display: grid;
-    grid-template-rows: repeat(6, auto);
+    grid-template-rows: subgrid;
+    grid-row: span 6;
     padding-block-start: 0;
 }
 
@@ -57,7 +61,7 @@
     grid-template-columns: 7rem minmax(0, 1fr);
     column-gap: var(--pf-t--global--spacer--sm);
     align-items: center;
-    block-size: 2.5rem;
+    min-block-size: 2.5rem;
     padding-block: var(--pf-t--global--spacer--xs);
 
     + .podman-pod-row {
@@ -74,30 +78,11 @@
 
 .podman-pod-row-value {
     min-inline-size: 0;
-    max-block-size: 100%;
-    overflow: hidden;
 }
 
-// label rows stay one line high; extra labels scroll sideways rather than wrapping
-.podman-pod-row-labels .podman-pod-row-value {
-    overflow-x: auto;
-    scrollbar-width: thin;
-
-    .pf-v6-c-label-group__list {
-        flex-wrap: nowrap;
-    }
-}
-
-// the member list is two label lines high; larger pods scroll inside it
 .podman-pod-row-members {
     align-items: start;
-    block-size: 5.25rem;
-
-    .podman-pod-row-value {
-        max-block-size: 100%;
-        overflow-y: auto;
-        scrollbar-width: thin;
-    }
+    min-block-size: 4rem;
 }
 
 .podman-pod-facts {
